@@ -1,0 +1,9 @@
+{
+  "Bill of Lading": 0,
+  "Purchase Order": 1,
+  "Fuel Receipt": 2,
+  "Electricity Bill": 3,
+  "Water Bill": 4,
+  "Invoice": 5,
+  "Packing List": 6
+}

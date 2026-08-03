@@ -12,3 +12,4 @@ joblib
 requests
 psutil
 numpy
+timm

@@ -56,22 +56,49 @@ All raw master datasets, transactional simulated ERP logs, and emission factor t
 ### Prerequisites
 - Python 3.10+
 - Node.js 18+
+- Git LFS (Git Large File Storage)
 
-### 1. Install Backend Dependencies
+### 1. Set Up Git LFS & Clone
+Initialize Git LFS on your machine to pull the fine-tuned model files during cloning:
 ```bash
-pip install -r requirements.txt
+# Initialize Git LFS on your machine
+git lfs install
+
+# Clone the repository
+git clone https://github.com/ani-1129/CarbonLedger.git
+cd CarbonLedger
+
+# Verify large LFS assets are pulled
+git lfs pull
 ```
 
-### 2. Initialize and Seed SQLite Database
+### 2. Install Dependencies
+```bash
+# Install Python backend dependencies
+pip install -r requirements.txt
+
+# Install React frontend dependencies
+cd frontend
+npm install
+cd ..
+```
+
+### 3. Automated One-Click Environment Setup
+Run the master setup script to decompress datasets, pre-download AI models from Hugging Face, and build the vector database:
+```bash
+python scripts/setup_project.py
+```
+This single command automates the following phases:
+1. **Decompress Datasets**: Extracts compressed ZIP dataset archives from `datasets/compressed/` into `datasets/output/` (Procurement logs, Invoices, Logistics, Utilities, etc.).
+2. **Download AI Models**: Automatically pre-downloads and caches all required pretrained models (DistilBert, LayoutLMv3, Table Transformer, BGE Embeddings, and Qwen2.5-Instruct) into `models/pretrained/`.
+3. **Rebuild Vector DB**: Cleans the emission factor workbook and builds the semantic embeddings index inside ChromaDB.
+
+### 4. Initialize SQLite Database
+Initialize the relational schema and seed it with multi-tenant default roles, users, and suppliers:
 ```bash
 python api/database.py
 ```
 
-### 3. Install Frontend Dependencies
-```bash
-cd frontend
-npm install
-```
 
 ---
 
@@ -153,6 +180,27 @@ To deploy the production-ready application stack using Docker Compose:
 cd docker
 docker-compose up --build -d
 ```
+
+---
+
+## Troubleshooting
+
+### Git LFS Bandwidth / Limit Errors
+If you run into Git LFS transfer limits or bandwidth errors during cloning, you can clone the repository without pulling LFS pointers immediately:
+```bash
+GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/ani-1129/CarbonLedger.git
+```
+Then pull them individually:
+```bash
+git lfs pull
+```
+
+### Missing Pretrained Cache Folders
+If you receive a `FileNotFoundError` or `ModuleNotFoundError` during server startup, ensure that the one-click setup orchestrator script has been executed successfully:
+```bash
+python scripts/setup_project.py
+```
+This script downloads Hugging Face models and extracts zipped datasets locally, ensuring all local cache assumptions match.
 
 ---
 

@@ -61,5 +61,12 @@
     "raw_input": "INV-98",
     "system_prediction": "Utility Bill",
     "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785745297.3513227,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
   }
 ]

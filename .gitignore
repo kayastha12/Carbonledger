@@ -41,13 +41,7 @@ temp/
 Thumbs.db
 
 # ML Models (Large Binaries)
-models/**/*.safetensors
-models/**/*.bin
-models/**/*.pt
-models/**/*.pkl
 models/pretrained/
-models/fine_tuned/
-models/saved_models/
 
 # Generated Datasets
 datasets/output/
