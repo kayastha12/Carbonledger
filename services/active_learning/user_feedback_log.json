@@ -1,0 +1,65 @@
+[
+  {
+    "timestamp": 1785436204.8123882,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785479914.4840102,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785479968.1850653,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785562233.5984192,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785678277.356004,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785678750.6076658,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785679001.4887671,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785737564.510651,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  },
+  {
+    "timestamp": 1785738085.174761,
+    "field_type": "document_class",
+    "raw_input": "INV-98",
+    "system_prediction": "Utility Bill",
+    "user_correction": "Invoice"
+  }
+]

@@ -1,0 +1,82 @@
+# CarbonLedger Synthetic Dataset Generator Configuration
+
+# General execution settings
+seed: 42
+parallel_workers: 4
+chunk_size: 50000
+output_formats: ["csv", "parquet"] # Options: csv, parquet, json
+
+# Data Quality Corruption Settings
+corruption_rate: 0.02 # 2% of transactional records will have anomalies
+
+# Dataset Sizes
+sizes:
+  companies: 100
+  suppliers: 5000
+  customers: 10000
+  employees: 5000
+  plants: 150
+  warehouses: 200
+  vehicles: 1000
+  drivers: 1200
+  products: 20000
+  product_bom: 100000
+  purchase_orders: 100000
+  purchase_order_items: 400000
+  invoices: 500000
+  payments: 500000
+  erp_export: 500000
+  shipping_manifest: 50000
+  logistics: 1000000
+  electricity_bills: 40000
+  fuel_logs: 30000
+  water_bills: 30000
+  waste_logs: 30000
+  employee_travel: 200000
+  cbam_reporting: 100000
+  manufacturing_orders: 150000
+  inventory: 100000
+  sustainability_targets: 100
+  carbon_offsets: 5000
+  supplier_audits: 8000
+  product_lifecycle: 20000
+  weather: 100000
+  shutdowns: 2000
+  documents: 100000
+  embeddings: 100000
+  ai_labels: 100000
+
+# Geographic references
+countries:
+  - India
+  - China
+  - Germany
+  - Japan
+  - South Korea
+  - Vietnam
+  - Thailand
+  - USA
+  - Canada
+  - UK
+  - France
+  - Italy
+  - Turkey
+  - UAE
+  - Australia
+  - Brazil
+
+# Industry categories
+industries:
+  - Steel
+  - Aluminium
+  - Cement
+  - Chemical
+  - Automobile
+  - Textile
+  - Plastic
+  - Copper
+  - Mining
+  - Food Processing
+  - Paper
+  - Electronics
+  - Machinery

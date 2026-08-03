@@ -1,0 +1,56 @@
+# Python
+__pycache__/
+.pytest_cache/
+*.pyc
+*.pyo
+*.pyd
+.ipynb_checkpoints
+.locks/
+*.db
+
+# Environment
+.env
+.env.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Frontend Node/Vite
+node_modules/
+dist/
+build/
+coverage/
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+# Output & Temp
+output/reports/generated/
+temp/
+*.tmp
+*.bak
+*.old
+
+# Editors/OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+
+# ML Models (Large Binaries)
+models/**/*.safetensors
+models/**/*.bin
+models/**/*.pt
+models/**/*.pkl
+models/pretrained/
+models/fine_tuned/
+models/saved_models/
+
+# Generated Datasets
+datasets/output/
+
+# Vector Database Data
+vector_db/chroma_data/

@@ -1,0 +1,14 @@
+torch
+transformers
+sentence-transformers
+fastapi
+uvicorn
+pydantic
+scikit-learn
+pandas
+openpyxl
+chromadb
+joblib
+requests
+psutil
+numpy

@@ -1,0 +1,5 @@
+id,document_type,name,facility,supplier,material,quantity,unit,cost,co2e_kg,scope,confidence,status,timestamp,audit_trail
+1,Invoice,invoice_inv_2026_901.pdf,Munich Plant,Supplier_1,Steel Plates,150.0,t,120000.0,42923.0,Scope 3,0.98,Calculated,2026-07-30T10:00:00Z,"[{'agent': 'IntakeAgent', 'confidence': 1.0, 'message': 'Loaded invoice from seed database.'}]"
+2,Invoice,invoice_inv_2026_902.pdf,Munich Plant,Supplier_2,Cement Blend,80.0,t,45000.0,12410.0,Scope 3,0.97,Calculated,2026-07-30T11:00:00Z,"[{'agent': 'IntakeAgent', 'confidence': 1.0, 'message': 'Loaded invoice from seed database.'}]"
+3,Invoice,universal_record_3.json,Munich Plant,Supplier_1,Steel Plates,150.0,t,120000.0,427.5,Scope 3,0.98,Calculated,2026-08-02T18:48:59.947765,"[{'agent': 'UniversalUploadService', 'confidence': 1.0, 'message': 'Calculated via Universal intake pipeline.'}]"
+4,Logistics,universal_record_4.json,Munich Plant,Logistics_Corp,Freight Transport,350.0,km,2500.0,997.5,Scope 3,0.98,Calculated,2026-08-02T18:48:59.947818,"[{'agent': 'UniversalUploadService', 'confidence': 1.0, 'message': 'Calculated via Universal intake pipeline.'}]"

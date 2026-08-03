@@ -1,0 +1,26 @@
+{
+  "title": "Corporate Carbon Inventory Report",
+  "year": 2026,
+  "metrics": {
+    "scope_1_co2e_kg": 1000,
+    "scope_2_location_co2e_kg": 3000,
+    "scope_3_co2e_kg": 15000
+  },
+  "breakdown": {
+    "scope_1_direct": {
+      "sources": [
+        "Stationary Combustion",
+        "Mobile Fleet"
+      ],
+      "value_co2e_kg": 1000
+    },
+    "scope_2_indirect": {
+      "location_based": 3000,
+      "market_based": 0.0
+    },
+    "scope_3_supply_chain": {
+      "category_1_purchased_goods": 11250.0,
+      "category_4_transport": 3750.0
+    }
+  }
+}

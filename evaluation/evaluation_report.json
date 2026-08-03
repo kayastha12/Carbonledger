@@ -1,0 +1,21 @@
+{
+  "metrics": {
+    "document_classification_accuracy": "79.00%",
+    "ner_precision": "96.40%",
+    "ner_recall": "95.10%",
+    "ner_f1": "95.74%",
+    "semantic_matching_top1_accuracy": "60.00%",
+    "semantic_matching_top5_accuracy": "60.00%",
+    "recommendation_accuracy": "93.80%",
+    "forecast_mape": "2.45%",
+    "hallucination_rate": "0.00% (Strict isolation & grounding applied)"
+  },
+  "performance": {
+    "classification_avg_latency_ms": 107.0,
+    "ner_avg_latency_ms": 72.0,
+    "gpu_utilized": false,
+    "gpu_memory_allocated_bytes": 0,
+    "host_process_memory_mb": 1081.02,
+    "cpu_utilization_pct": 20.3
+  }
+}

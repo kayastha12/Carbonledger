@@ -1,0 +1,10 @@
+{
+  "title": "Quarterly CBAM Declaration Report",
+  "declaration_quarter": "2026-Q2",
+  "declaration_rules": "EU Commission CBAM transition regulation",
+  "embedded_emissions": {
+    "specific_direct_t_per_t": 0.0,
+    "specific_indirect_t_per_t": 0.0,
+    "total_specific_t_per_t": 0.0
+  }
+}
