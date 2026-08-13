@@ -28,7 +28,7 @@ yarn-debug.log*
 yarn-error.log*
 
 # Output & Temp
-output/reports/generated/
+output/
 temp/
 *.tmp
 *.bak
@@ -48,3 +48,7 @@ datasets/output/
 
 # Vector Database Data
 vector_db/chroma_data/
+
+# Virtual Environment
+venv/
+.venv/

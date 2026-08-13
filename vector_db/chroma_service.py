@@ -1,16 +1,22 @@
 import os
 import json
+from typing import Optional, List, Dict, Any
 import chromadb
 from sentence_transformers import SentenceTransformer
 
 class ChromaService:
-    def __init__(self, persist_dir="d:/internship/carbonledger/vector_db/chroma_data"):
-        self.persist_dir = persist_dir
+    """
+    ChromaDB Vector Service for Semantic Emission Factor Search.
+    Uses dynamic path resolution without hardcoded paths.
+    """
+    def __init__(self, persist_dir: Optional[str] = None):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.persist_dir = persist_dir or os.path.join(project_root, "vector_db", "chroma_data")
         os.makedirs(self.persist_dir, exist_ok=True)
         self.client = chromadb.PersistentClient(path=self.persist_dir)
         
         # Load BAAI/bge-small-en-v1.5 from local cache or auto-download
-        self.pretrained_cache_bge = "d:/internship/carbonledger/models/pretrained/bge-small-en-v1.5"
+        self.pretrained_cache_bge = os.path.join(project_root, "models", "pretrained", "bge-small-en-v1.5")
         os.makedirs(self.pretrained_cache_bge, exist_ok=True)
         try:
             print("Loading embedding model BAAI/bge-small-en-v1.5...")
@@ -22,7 +28,7 @@ class ChromaService:
         self.collection_name = "emission_factors"
         self.collection = self.client.get_or_create_collection(self.collection_name)
 
-    def index_factors(self, factors_json_path, refresh_embeddings=False):
+    def index_factors(self, factors_json_path: str, refresh_embeddings: bool = False):
         print(f"Indexing emission factors from: {factors_json_path}")
         with open(factors_json_path, "r", encoding="utf-8") as f:
             factors = json.load(f)
@@ -38,43 +44,37 @@ class ChromaService:
         ids = []
         documents = []
         metadatas = []
-        
-        # In-memory deduplication tracker
         existing_keys = {}
         
         batch_size = 500
         for i, f in enumerate(factors):
-            # Formulate key-value uniqueness
             unique_key = f"{f.get('scope')}_{f.get('category')}_{f.get('subcategory')}_{f.get('activity')}_{f.get('detail')}_{f.get('text')}"
             
-            # Duplicate detection & Version tracking
             if unique_key in existing_keys:
                 existing_f = existing_keys[unique_key]
                 if float(existing_f.get("factor", 0.0)) == float(f.get("factor", 0.0)):
-                    # Exact duplicate, skip indexing
                     continue
                 else:
-                    # Factor value updated. Increment version history index
                     f["factor_version"] = f"2026.2_rev_{i}"
             else:
                 existing_keys[unique_key] = f
                 
             text_desc = f"{f.get('scope', '')} | {f.get('category', '')} | {f.get('subcategory', '')} | {f.get('activity', '')} | {f.get('detail', '')} | {f.get('text', '')}"
             
-            ids.append(f.get("id"))
+            ids.append(str(f.get("id")))
             documents.append(text_desc)
             metadatas.append({
-                "id": f.get("id"),
-                "scope": f.get("scope"),
-                "category": f.get("category"),
-                "subcategory": f.get("subcategory"),
-                "activity": f.get("activity"),
-                "detail": f.get("detail"),
-                "text": f.get("text"),
-                "uom": f.get("uom"),
-                "ghg_unit": f.get("ghg_unit"),
+                "id": str(f.get("id")),
+                "scope": f.get("scope", "Scope 3"),
+                "category": f.get("category", "General"),
+                "subcategory": f.get("subcategory", "General"),
+                "activity": f.get("activity", ""),
+                "detail": f.get("detail", ""),
+                "text": f.get("text", ""),
+                "uom": f.get("uom", "kg"),
+                "ghg_unit": f.get("ghg_unit", "kg CO2e"),
                 "factor": float(f.get("factor", 0.0)),
-                "source_sheet": f.get("source_sheet"),
+                "source_sheet": f.get("source_sheet", "Master Database"),
                 "factor_version": f.get("factor_version", "2026.1")
             })
             
@@ -92,7 +92,7 @@ class ChromaService:
                 
         print(f"Indexed records (Collection count: {self.collection.count()})")
 
-    def query_factors(self, query_text, top_n=5):
+    def query_factors(self, query_text: str, top_n: int = 5) -> List[Dict[str, Any]]:
         query_embedding = self.model.encode([query_text]).tolist()
         results = self.collection.query(
             query_embeddings=query_embedding,
@@ -100,7 +100,7 @@ class ChromaService:
         )
         
         candidates = []
-        if results and results["ids"] and len(results["ids"]) > 0:
+        if results and results.get("ids") and len(results["ids"]) > 0:
             for idx in range(len(results["ids"][0])):
                 dist = results["distances"][0][idx]
                 confidence = max(0.0, min(1.0, 1.0 - (dist / 2.0)))
@@ -125,10 +125,8 @@ class ChromaService:
 
 if __name__ == "__main__":
     service = ChromaService()
-    factors_json = "d:/internship/carbonledger/preprocessing/master_factors_cleaned.json"
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    factors_json = os.path.join(project_root, "preprocessing", "master_factors_cleaned.json")
     if os.path.exists(factors_json):
-        # Refresh embedding index
-        service.index_factors(factors_json, refresh_embeddings=True)
-        # Test query
         res = service.query_factors("Steel Sheet Metal", top_n=2)
         print(json.dumps(res, indent=2))

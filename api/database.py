@@ -1,7 +1,10 @@
+import os
 import sqlite3
+import json
 import time
 
-DATABASE_PATH = "d:/internship/carbonledger/carbonledger.db"
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+DATABASE_PATH = os.path.join(PROJECT_ROOT, "carbonledger.db")
 
 def get_db_connection():
     conn = sqlite3.connect(DATABASE_PATH)
@@ -12,329 +15,121 @@ def init_db():
     conn = get_db_connection()
     cursor = conn.cursor()
     
-    # 1. Users Table
+    # 1. App Settings Table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS users (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        email TEXT UNIQUE,
-        password TEXT,
-        role TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
+    CREATE TABLE IF NOT EXISTS app_settings (
+        key TEXT PRIMARY KEY,
+        value TEXT,
         updated_at REAL
     )
     """)
     
-    # 2. Roles Table
+    # 2. Upload Sessions Table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS roles (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT UNIQUE,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 3. Permissions Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS permissions (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        role TEXT,
-        action TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 4. Workspaces Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS workspaces (
-        id TEXT PRIMARY KEY,
-        name TEXT,
-        tenant_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 5. Suppliers Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS suppliers (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        country TEXT,
-        esg_score REAL,
-        risk_level TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 6. Documents Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS documents (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+    CREATE TABLE IF NOT EXISTS upload_sessions (
+        upload_id TEXT PRIMARY KEY,
         filename TEXT,
-        doc_type TEXT,
-        content TEXT,
-        status TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
+        pages_count INTEGER,
+        tables_count INTEGER,
+        total_co2e_kg REAL,
+        total_cbam_cost_eur REAL,
+        overall_confidence_pct REAL,
+        created_at TEXT
     )
     """)
-    
-    # 7. Invoices Table
+
+    # 3. Extracted Records Table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS invoices (
+    CREATE TABLE IF NOT EXISTS extracted_records (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
-        invoice_number TEXT,
-        supplier TEXT,
-        material TEXT,
-        quantity REAL,
-        unit TEXT,
-        cost REAL,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 8. PurchaseOrders Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS purchase_orders (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        upload_id TEXT,
         po_number TEXT,
         supplier TEXT,
         material TEXT,
         quantity REAL,
         unit TEXT,
         cost REAL,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 9. UtilityBills Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS utility_bills (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        utility_provider TEXT,
-        utility_type TEXT,
-        consumption REAL,
-        unit TEXT,
-        cost REAL,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 10. Facilities Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS facilities (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT,
-        location TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 11. FuelConsumption Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS fuel_consumption (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        fuel_type TEXT,
-        quantity REAL,
-        unit TEXT,
         facility TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
+        country TEXT,
+        section TEXT,
+        ocr_confidence REAL,
+        FOREIGN KEY (upload_id) REFERENCES upload_sessions(upload_id)
     )
     """)
-    
-    # 12. MaterialConsumption Table
+
+    # 4. Calculation Results Table
     cursor.execute("""
-    CREATE TABLE IF NOT EXISTS material_consumption (
+    CREATE TABLE IF NOT EXISTS calculation_results (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
+        upload_id TEXT,
         material TEXT,
+        supplier TEXT,
         quantity REAL,
         unit TEXT,
-        facility TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 13. Logistics Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS logistics (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        transport_mode TEXT,
-        distance REAL,
-        weight REAL,
-        origin TEXT,
-        destination TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 14. EmissionCalculations Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS emission_calculations (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        document_id INTEGER,
-        co2e_kg REAL,
-        scope TEXT,
-        confidence REAL,
-        factor_used REAL,
+        matched_material TEXT,
+        factor_id TEXT,
         factor_source TEXT,
-        anomaly_check TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
+        scope TEXT,
+        emission_factor REAL,
+        co2_kg REAL,
+        ch4_kg REAL,
+        n2o_kg REAL,
+        co2e_kg REAL,
+        cbam_cost_eur REAL,
+        calculation_status TEXT,
+        formula TEXT,
+        trace_json TEXT,
+        FOREIGN KEY (upload_id) REFERENCES upload_sessions(upload_id)
     )
     """)
-    
-    # 15. Reports Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS reports (
-        id TEXT PRIMARY KEY,
-        report_type TEXT,
-        filepath TEXT,
-        metadata_json TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 16. Notifications Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS notifications (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT,
-        message TEXT,
-        recipient_role TEXT,
-        recipient_email TEXT,
-        is_read INTEGER DEFAULT 0,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 17. AuditTrail Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS audit_trail (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        action TEXT,
-        details TEXT,
-        user_email TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # 18. Events Table
-    cursor.execute("""
-    CREATE TABLE IF NOT EXISTS events (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        event_type TEXT,
-        payload TEXT,
-        tenant_id TEXT,
-        workspace_id TEXT,
-        created_by TEXT,
-        created_at REAL,
-        updated_at REAL
-    )
-    """)
-    
-    # Seed default workspaces
-    cursor.execute("SELECT id FROM workspaces WHERE id = 'workspace_default'")
-    if not cursor.fetchone():
+
+    # Default Settings
+    defaults = {
+        "carbon_price_eur_per_ton": "85.0",
+        "default_region": "DE",
+        "reporting_year": "2026",
+        "theme": "dark",
+        "user_profile": json.dumps({"name": "Sustainability Manager", "email": "manager@company.com", "role": "Sustainability Lead"})
+    }
+
+    for k, v in defaults.items():
         cursor.execute("""
-        INSERT INTO workspaces (id, name, tenant_id, created_by, created_at, updated_at)
-        VALUES ('workspace_default', 'Main Workspace', 'tenant_default', 'system', ?, ?)
-        """, (time.time(), time.time()))
-        
-    # Seed default users
-    demo_users = [
-        ('admin@carbonledger.ai', 'demo123', 'Company Administrator', 'tenant_default', 'workspace_default'),
-        ('auditor@carbonledger.ai', 'demo123', 'Carbon Auditor', 'tenant_default', 'workspace_default'),
-        ('supplier@steelcorp.com', 'demo123', 'Supplier Representative', 'tenant_default', 'workspace_default'),
-        ('ceo@ecosteel.eu', 'demo123', 'Executive (CEO)', 'tenant_default', 'workspace_default'),
+        INSERT OR IGNORE INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        """, (k, v, time.time()))
+
+    # Add columns to calculation_results if they do not exist
+    alter_queries = [
+        "ALTER TABLE calculation_results ADD COLUMN is_anomaly INTEGER DEFAULT 0",
+        "ALTER TABLE calculation_results ADD COLUMN anomaly_reason TEXT",
+        "ALTER TABLE calculation_results ADD COLUMN is_duplicate INTEGER DEFAULT 0",
+        "ALTER TABLE calculation_results ADD COLUMN ocr_error INTEGER DEFAULT 0",
+        "ALTER TABLE calculation_results ADD COLUMN recommendations_json TEXT",
+        "ALTER TABLE calculation_results ADD COLUMN po_number TEXT"
     ]
-    
-    for email, pw, role, tenant, ws in demo_users:
-        cursor.execute("SELECT email FROM users WHERE email = ?", (email,))
-        if not cursor.fetchone():
-            cursor.execute("""
-            INSERT INTO users (email, password, role, tenant_id, workspace_id, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, ?, 'system', ?, ?)
-            """, (email, pw, role, tenant, ws, time.time(), time.time()))
-            
-    # Seed default suppliers
-    suppliers = [
-        ('Supplier_1', 'DE', 4.2, 'Low'),
-        ('Supplier_2', 'CN', 2.5, 'High'),
-        ('SteelCorp India', 'IN', 4.5, 'Medium')
-    ]
-    for name, country, esg, risk in suppliers:
-        cursor.execute("SELECT name FROM suppliers WHERE name = ?", (name,))
-        if not cursor.fetchone():
-            cursor.execute("""
-            INSERT INTO suppliers (name, country, esg_score, risk_level, tenant_id, workspace_id, created_by, created_at, updated_at)
-            VALUES (?, ?, ?, ?, 'tenant_default', 'workspace_default', 'system', ?, ?)
-            """, (name, country, esg, risk, time.time(), time.time()))
-            
+    for q in alter_queries:
+        try:
+            cursor.execute(q)
+        except Exception:
+            pass
+
+    # Create parsing_reviews table
+    cursor.execute("DROP TABLE IF EXISTS parsing_reviews")
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS parsing_reviews (
+        upload_id TEXT PRIMARY KEY,
+        original_ocr_json TEXT,
+        reviewed_json TEXT,
+        final_approved_json TEXT,
+        audit_log TEXT,
+        parser_response TEXT,
+        created_at TEXT
+    )
+    """)
+
     conn.commit()
     conn.close()
-    print("SQLite database tables initialized and seeded successfully.")
 
 if __name__ == "__main__":
     init_db()
+    print("Database initialized successfully at:", DATABASE_PATH)

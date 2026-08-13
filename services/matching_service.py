@@ -2,18 +2,27 @@ import os
 import pandas as pd
 import difflib
 import numpy as np
+from typing import Optional, Dict, Any, List
 from sentence_transformers import SentenceTransformer
 from vector_db.chroma_service import ChromaService
+from services.emission_factor_service import EmissionFactorService
 
 class MatchingService:
-    def __init__(self, chroma_service=None, suppliers_csv_path="d:/internship/carbonledger/datasets/output/master/suppliers.csv"):
+    """
+    Supplier and Emission Factor Matching Service.
+    Delegates factor retrieval to Centralized EmissionFactorService.
+    """
+    def __init__(self, chroma_service=None, suppliers_csv_path: Optional[str] = None):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.chroma = chroma_service if chroma_service else ChromaService()
-        self.suppliers_csv = suppliers_csv_path
+        self.suppliers_csv = suppliers_csv_path or os.path.join(project_root, "datasets", "output", "master", "suppliers.csv")
         self.supplier_master = []
+        self.factor_service = EmissionFactorService.get_instance()
         
         # Load SentenceTransformer for Supplier matching
+        pretrained_cache = os.path.join(project_root, "models", "pretrained", "all-MiniLM-L6-v2")
         try:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder="d:/internship/carbonledger/models/pretrained/all-MiniLM-L6-v2")
+            self.model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder=pretrained_cache)
         except Exception as e:
             print(f"Warning: SentenceTransformer load for supplier matcher failed ({e})")
             self.model = None
@@ -33,7 +42,7 @@ class MatchingService:
             except Exception as e:
                 print("Error loading suppliers:", e)
 
-    def match_supplier(self, query_name, threshold=0.6):
+    def match_supplier(self, query_name: str, threshold: float = 0.6) -> Dict[str, Any]:
         """
         Match a supplier using a hybrid of Semantic (SentenceTransformer) and Lexical (fuzzy) matching.
         """
@@ -41,11 +50,9 @@ class MatchingService:
             return {"matched_name": query_name, "confidence": 1.0, "is_duplicate": False, "status": "Matched (Default)"}
             
         q = str(query_name).strip().lower()
-        
         best_match = None
         best_score = 0.0
         
-        # Encode master and query if model is available
         q_emb = None
         master_embs = None
         if self.model:
@@ -84,21 +91,42 @@ class MatchingService:
             "raw_query": query_name
         }
 
-    def match_emission_factor(self, item_description, top_n=5):
+    def match_emission_factor(self, item_description: str, top_n: int = 5) -> List[Dict[str, Any]]:
         """
-        Query ChromaDB for top-5 candidates of matching emission factors.
+        Query Centralized EmissionFactorService for top matching candidates.
         """
-        candidates = self.chroma.query_factors(item_description, top_n=top_n)
+        match = self.factor_service.get_factor(item_description)
+        candidates = [{
+            "id": match.factor_id,
+            "scope": match.scope,
+            "category": match.activity_type,
+            "activity": match.material,
+            "uom": match.unit,
+            "ghg_unit": match.ghg_unit,
+            "factor": match.emission_factor,
+            "source_sheet": match.factor_source,
+            "factor_version": match.factor_version,
+            "confidence": match.confidence,
+            "match_method": match.match_method,
+            "explanation": f"Matched via Centralized EmissionFactorService ({match.match_method})"
+        }]
+        
+        # Optionally supplement with Chroma candidates if vector top_n requested
+        if top_n > 1 and self.chroma:
+            try:
+                chroma_cands = self.chroma.query_factors(item_description, top_n=top_n-1)
+                for c in chroma_cands:
+                    if str(c.get("id")) != match.factor_id:
+                        candidates.append(c)
+            except Exception:
+                pass
+                
         return candidates
 
 if __name__ == "__main__":
     matcher = MatchingService()
-    # Test supplier matching
     res_sup = matcher.match_supplier("SteelCorp Inc")
     print("Supplier Match:", res_sup)
     
-    # Test factor matching
     res_fact = matcher.match_emission_factor("Steel sheet metal use")
-    print("Emission Factor Matches:")
-    for idx, c in enumerate(res_fact):
-        print(f"{idx+1}. ID: {c['id']}, Scope: {c['scope']}, Factor: {c['factor']}, Conf: {c['confidence']:.2%}")
+    print("Emission Factor Matches:", res_fact)

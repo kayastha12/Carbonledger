@@ -13,6 +13,7 @@ import pandas as pd
 from models.document_classifier import DocumentClassifier
 from models.ner_extractor import NERExtractor
 from models.supplier_risk_model import SupplierRiskModel
+from services.emission_factor_service import EmissionFactorService
 from services.matching_service import MatchingService
 from services.calculation_engine import CalculationEngine
 from services.recommendation_engine import RecommendationEngine
@@ -53,12 +54,26 @@ app.add_middleware(
 )
 
 # Services Instantiation
+factor_service = EmissionFactorService.get_instance()
 classifier = DocumentClassifier()
 extractor = NERExtractor()
 matcher = MatchingService()
 calculator = CalculationEngine()
 recommender = RecommendationEngine()
 rag_service = RAGService()
+
+@app.on_event("startup")
+async def startup_event():
+    print(f"[Startup] Centralized EmissionFactorService initialized. Loaded {factor_service.metrics['total_factors_loaded']} factors.")
+
+@app.get("/api/v1/emission-factors/metrics")
+def get_emission_factor_metrics():
+    return factor_service.get_metrics()
+
+@app.get("/api/v1/emission-factors/search")
+def search_emission_factor(query: str, scope: Optional[str] = None, unit: Optional[str] = None, region: Optional[str] = None, year: Optional[int] = None):
+    match = factor_service.get_factor(query, scope=scope, unit=unit, region=region, year=year)
+    return match.to_dict()
 
 # Phase 3 & 4
 workflow = AutonomousWorkflow(classifier, extractor, matcher, calculator, recommender)
@@ -583,6 +598,11 @@ def api_forecast(payload: ForecastRequest):
     res = predictor.predict_future_emissions(months_ahead=payload.months_ahead)
     return res
 
+@app.post("/api/what-if")
+def api_what_if(payload: WhatIfSchema):
+    res = predictor.run_what_if_scenario(payload.strategy)
+    return res
+
 @app.get("/api/models/status")
 def get_models_status():
     import psutil
@@ -605,20 +625,72 @@ def get_models_status():
         }
     }
 
+class SaveChangesRequest(BaseModel):
+    upload_id: str
+    records: List[dict]
+
+class ApproveRequest(BaseModel):
+    upload_id: str
+    records: List[dict]
+
 @app.post("/api/upload/universal")
 async def api_upload_universal(file: Optional[UploadFile] = File(None), payload: Optional[str] = Form(None)):
     if payload:
         try:
             records = json.loads(payload)
-            res = universal_service.calculate_and_save(records, db_inventory)
-            return res
+            upload_id = f"upload_{uuid.uuid4().hex[:8]}"
+            
+            parsed_res = {
+                "file_name": "payload.json",
+                "upload_time": pd.Timestamp.now().isoformat(),
+                "pages_count": 1,
+                "tables_count": 0,
+                "validation_score": 100.0,
+                "ai_confidence": 1.0,
+                "processing_time_ms": 0.0,
+                "records": records,
+                "raw_ocr_data": {"text": "Payload direct input. No raw OCR text available."},
+                "logs": []
+            }
+
+            conn = get_db_connection()
+            cursor = conn.cursor()
+            cursor.execute("""
+            INSERT OR REPLACE INTO parsing_reviews 
+            (upload_id, original_ocr_json, reviewed_json, final_approved_json, audit_log, parser_response, created_at)
+            VALUES (?, ?, ?, ?, ?, ?, ?)
+            """, (
+                upload_id,
+                json.dumps(records),
+                json.dumps(records),
+                "",
+                json.dumps([{"timestamp": pd.Timestamp.now().isoformat(), "action": "JSON payload submitted and parsed", "user": "System"}]),
+                json.dumps(parsed_res),
+                pd.Timestamp.now().isoformat()
+            ))
+            conn.commit()
+            conn.close()
+
+            return {
+                "upload_id": upload_id,
+                "status": "parsed",
+                "file_name": "payload.json",
+                "records": records,
+                "parser_response": parsed_res,
+                "parsed_metadata": {
+                    "pages_count": 1,
+                    "tables_count": 0,
+                    "validation_score": 100.0
+                }
+            }
         except Exception as e:
             raise HTTPException(status_code=400, detail=f"Failed to process records: {e}")
             
     if not file:
         raise HTTPException(status_code=400, detail="Either file or JSON payload is required")
         
-    temp_dir = "d:/internship/carbonledger/temp"
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    temp_dir = os.path.join(project_root, "output", "temp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, file.filename)
     
@@ -626,29 +698,306 @@ async def api_upload_universal(file: Optional[UploadFile] = File(None), payload:
         f.write(await file.read())
         
     try:
-        res = universal_service.parse_uploaded_file(temp_path, file.filename)
-        return res
+        parsed_res = universal_service.parse_uploaded_file(temp_path, file.filename)
+        extracted_records = parsed_res.get("records", [])
+        upload_id = f"upload_{uuid.uuid4().hex[:8]}"
+
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("""
+        INSERT OR REPLACE INTO parsing_reviews 
+        (upload_id, original_ocr_json, reviewed_json, final_approved_json, audit_log, parser_response, created_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+        """, (
+            upload_id,
+            json.dumps(extracted_records),
+            json.dumps(extracted_records),
+            "",
+            json.dumps([{"timestamp": pd.Timestamp.now().isoformat(), "action": f"Document '{file.filename}' uploaded and parsed", "user": "System"}]),
+            json.dumps(parsed_res),
+            pd.Timestamp.now().isoformat()
+        ))
+        conn.commit()
+        conn.close()
+
+        return {
+            "upload_id": upload_id,
+            "status": "parsed",
+            "file_name": file.filename,
+            "records": extracted_records,
+            "parser_response": parsed_res,
+            "parsed_metadata": {
+                "pages_count": parsed_res.get("pages_count", 1),
+                "tables_count": parsed_res.get("tables_count", 0),
+                "validation_score": parsed_res.get("validation_score", 100.0)
+            }
+        }
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=400, detail=str(e))
     finally:
         if os.path.exists(temp_path):
-            os.remove(temp_path)
+            try:
+                os.remove(temp_path)
+            except Exception:
+                pass
+
+@app.post("/api/upload/save-changes")
+def save_changes(req: SaveChangesRequest):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT audit_log FROM parsing_reviews WHERE upload_id = ?", (req.upload_id,))
+        row = cursor.fetchone()
+        
+        audit_log = []
+        if row and row["audit_log"]:
+            try:
+                audit_log = json.loads(row["audit_log"])
+            except Exception:
+                pass
+                
+        audit_log.append({
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "action": "Extracted records edited and saved by user",
+            "user": "User"
+        })
+        
+        cursor.execute("""
+        UPDATE parsing_reviews 
+        SET reviewed_json = ?, audit_log = ?
+        WHERE upload_id = ?
+        """, (json.dumps(req.records), json.dumps(audit_log), req.upload_id))
+        
+        conn.commit()
+        conn.close()
+        return {"status": "saved"}
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to save changes: {e}")
+
+@app.post("/api/upload/approve")
+def approve_and_calculate(req: ApproveRequest):
+    try:
+        # 1. Run required fields validator check
+        universal_service._validate_required_fields(req.records)
+    except ValueError as val_err:
+        raise HTTPException(status_code=400, detail=str(val_err))
+        
+    try:
+        # 2. Run Carbon Engine calculations, persist to DB, and generate reports
+        calc_res = universal_service.calculate_and_save(req.records, upload_id=req.upload_id)
+        
+        # 3. Store final approved JSON and update audit log
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT audit_log FROM parsing_reviews WHERE upload_id = ?", (req.upload_id,))
+        row = cursor.fetchone()
+        
+        audit_log = []
+        if row and row["audit_log"]:
+            try:
+                audit_log = json.loads(row["audit_log"])
+            except Exception:
+                pass
+                
+        audit_log.append({
+            "timestamp": pd.Timestamp.now().isoformat(),
+            "action": "Fidelity validation passed. Records approved and calculated.",
+            "user": "User"
+        })
+        
+        cursor.execute("""
+        UPDATE parsing_reviews 
+        SET final_approved_json = ?, audit_log = ?
+        WHERE upload_id = ?
+        """, (json.dumps(req.records), json.dumps(audit_log), req.upload_id))
+        
+        conn.commit()
+        conn.close()
+        
+        calc_res["status"] = "calculated"
+        return calc_res
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to calculate emissions for approved records: {e}")
+
+@app.get("/api/upload/review/{upload_id}")
+def get_review_session(upload_id: str):
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT * FROM parsing_reviews WHERE upload_id = ?", (upload_id,))
+        row = cursor.fetchone()
+        conn.close()
+        
+        if not row:
+            raise HTTPException(status_code=404, detail="Review session not found")
+            
+        return {
+            "upload_id": row["upload_id"],
+            "original_ocr_json": json.loads(row["original_ocr_json"]) if row["original_ocr_json"] else [],
+            "reviewed_json": json.loads(row["reviewed_json"]) if row["reviewed_json"] else [],
+            "final_approved_json": json.loads(row["final_approved_json"]) if row["final_approved_json"] else [],
+            "audit_log": json.loads(row["audit_log"]) if row["audit_log"] else [],
+            "parser_response": json.loads(row["parser_response"]) if row["parser_response"] else {},
+            "created_at": row["created_at"]
+        }
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+@app.get("/api/upload/latest")
+def get_latest_upload():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("""
+    SELECT upload_id, filename, pages_count, tables_count, total_co2e_kg, total_cbam_cost_eur, overall_confidence_pct, created_at 
+    FROM upload_sessions 
+    ORDER BY ROWID DESC LIMIT 1
+    """)
+    session = cursor.fetchone()
+    if not session:
+        conn.close()
+        return None
+        
+    upload_id = session["upload_id"]
+    filename = session["filename"]
+    
+    cursor.execute("""
+    SELECT * FROM calculation_results WHERE upload_id = ?
+    """, (upload_id,))
+    rows = cursor.fetchall()
+    
+    # Query parsing reviews to get the parser response
+    cursor.execute("SELECT parser_response FROM parsing_reviews WHERE upload_id = ?", (upload_id,))
+    review_row = cursor.fetchone()
+    parser_response = {}
+    if review_row and review_row["parser_response"]:
+        try:
+            parser_response = json.loads(review_row["parser_response"])
+        except Exception:
+            pass
+            
+    conn.close()
+    
+    records = []
+    for row in rows:
+        rec = dict(row)
+        try:
+            rec["calculation_trace"] = json.loads(row["trace_json"])
+        except Exception:
+            rec["calculation_trace"] = []
+        try:
+            rec["recommendations"] = json.loads(row["recommendations_json"]) if row["recommendations_json"] else []
+        except Exception:
+            rec["recommendations"] = []
+        # Support flat UI fields
+        rec["co2e_kg"] = row["co2e_kg"]
+        rec["co2_kg"] = row["co2_kg"]
+        rec["ch4_kg"] = row["ch4_kg"]
+        rec["n2o_kg"] = row["n2o_kg"]
+        rec["emission_factor"] = row["emission_factor"]
+        rec["cbam_cost_eur"] = row["cbam_cost_eur"]
+        records.append(rec)
+        
+    # Reconstruct summary
+    scope_1_kg = sum(r["co2e_kg"] for r in records if r["scope"] == "Scope 1")
+    scope_2_kg = sum(r["co2e_kg"] for r in records if r["scope"] == "Scope 2")
+    scope_3_kg = sum(r["co2e_kg"] for r in records if r["scope"] == "Scope 3")
+    total_cbam_cost_eur = sum(r["cbam_cost_eur"] for r in records)
+    total_co2e_kg = round(scope_1_kg + scope_2_kg + scope_3_kg, 2)
+    matched_factors_count = sum(1 for r in records if r["calculation_status"] == "Calculated")
+    
+    # We can reconstruct report links
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    upload_dir = os.path.join(project_root, "output", "reports", "uploads", upload_id)
+    
+    reports_map = {
+        "carbon_report_pdf": f"/api/reports/download?path={os.path.join(upload_dir, 'carbon_report.pdf')}",
+        "cbam_report_excel": f"/api/reports/download?path={os.path.join(upload_dir, 'cbam_report.xlsx')}",
+        "inventory_excel": f"/api/reports/download?path={os.path.join(upload_dir, 'inventory.xlsx')}",
+        "audit_json": f"/api/reports/download?path={os.path.join(upload_dir, 'audit.json')}",
+        "executive_esg_pdf": f"/api/reports/download?path={os.path.join(upload_dir, 'executive_esg_report.pdf')}"
+    }
+    
+    return {
+        "file_name": filename,
+        "upload_id": upload_id,
+        "upload_time": session["created_at"],
+        "pages_count": session["pages_count"],
+        "tables_count": session["tables_count"],
+        "validation_score": 96.5,
+        "ai_confidence": session["overall_confidence_pct"],
+        "processing_time_ms": 150.0,
+        "records": records,
+        "parser_response": parser_response,
+        "summary": {
+            "documents_processed": len(set([r.get("source_document", filename) for r in records])) if records else 0,
+            "rows_extracted": len(records),
+            "rows_validated": len(records),
+            "rows_calculated": matched_factors_count,
+            "rows_manual_review": len(records) - matched_factors_count,
+            "total_co2e_kg": total_co2e_kg,
+            "total_co2e_tonnes": round(total_co2e_kg / 1000.0, 3),
+            "total_cbam_cost_eur": round(total_cbam_cost_eur, 2),
+            "scope_1_co2e_kg": round(scope_1_kg, 2),
+            "scope_2_co2e_kg": round(scope_2_kg, 2),
+            "scope_3_co2e_kg": round(scope_3_kg, 2),
+            "materials_count": len(set([r["material"] for r in records])) if records else 0,
+            "suppliers_count": len(set([r["supplier"] for r in records])) if records else 0,
+            "overall_confidence_pct": session["overall_confidence_pct"]
+        },
+        "reports": reports_map
+    }
+
+@app.get("/api/v1/settings")
+def get_settings():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT key, value FROM app_settings")
+    rows = cursor.fetchall()
+    conn.close()
+    res = {row["key"]: row["value"] for row in rows}
+    return res
+
+@app.post("/api/v1/settings")
+def update_settings(payload: dict):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    for k, v in payload.items():
+        val_str = json.dumps(v) if isinstance(v, (dict, list)) else str(v)
+        cursor.execute("""
+        INSERT INTO app_settings (key, value, updated_at)
+        VALUES (?, ?, ?)
+        ON CONFLICT(key) DO UPDATE SET value=excluded.value, updated_at=excluded.updated_at
+        """, (k, val_str, time.time()))
+    conn.commit()
+    conn.close()
+    return {"status": "success", "updated_keys": list(payload.keys())}
 
 @app.get("/api/reports/download")
-def download_universal_report(name: str):
-    report_path = os.path.join("d:/internship/carbonledger/output/reports", name)
+def download_universal_report(name: Optional[str] = None, path: Optional[str] = None):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    if path and os.path.exists(path):
+        report_path = path
+        file_name = os.path.basename(path)
+    elif name:
+        report_path = os.path.join(project_root, "output", "reports", name)
+        file_name = name
+    else:
+        raise HTTPException(status_code=400, detail="Either name or path is required")
+
     if os.path.exists(report_path):
-        ext = os.path.splitext(name)[1].lower()
+        ext = os.path.splitext(file_name)[1].lower()
         if ext == ".xlsx":
             media = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         elif ext == ".csv":
             media = "text/csv"
         elif ext == ".json":
             media = "application/json"
-        else:
+        elif ext == ".pdf":
             media = "application/pdf"
-        return FileResponse(report_path, media_type=media, filename=name)
-    raise HTTPException(status_code=404, detail="Report not found")
+        else:
+            media = "application/octet-stream"
+        return FileResponse(report_path, media_type=media, filename=file_name)
+    raise HTTPException(status_code=404, detail="File not found")# Removed duplicate download_universal_report block
 
 # ----------------------------------------------------
 # CBAM REPORT GENERATOR WORKFLOW ENDPOINTS
