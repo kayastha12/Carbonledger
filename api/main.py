@@ -972,6 +972,243 @@ def update_settings(payload: dict):
     conn.close()
     return {"status": "success", "updated_keys": list(payload.keys())}
 
+# ==============================================================================
+# AUTHENTICATION & ENTERPRISE ADMIN API ENDPOINTS
+# ==============================================================================
+
+import hashlib
+import jwt
+
+JWT_SECRET = "carbonledger_enterprise_jwt_secret_key_2026"
+JWT_ALGORITHM = "HS256"
+
+def _hash_pw(password: str) -> str:
+    salt = "carbonledger_secure_salt_2026"
+    return hashlib.sha256((password + salt).encode('utf-8')).hexdigest()
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+class RegisterRequest(BaseModel):
+    email: str
+    password: str
+    full_name: str
+    organization: str
+    role: Optional[str] = "auditor"
+    default_region: Optional[str] = "DE"
+
+class RuleRequest(BaseModel):
+    id: Optional[int] = None
+    rule_name: str
+    rule_type: str
+    condition_field: str
+    condition_operator: str
+    condition_value: str
+    target_action: str
+    target_value: str
+    priority: int = 10
+    is_active: int = 1
+
+class FactorOverrideRequest(BaseModel):
+    id: Optional[int] = None
+    material_pattern: str
+    region: str
+    scope: str
+    custom_emission_factor: float
+    unit: str
+    source_name: str
+    reason: Optional[str] = ""
+
+class UserRoleUpdate(BaseModel):
+    role: str
+
+@app.post("/api/v1/auth/login")
+def api_auth_login(req: LoginRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    hashed_pw = _hash_pw(req.password)
+    cursor.execute("""
+    SELECT id, email, full_name, organization, role, default_region, is_active 
+    FROM users 
+    WHERE LOWER(email) = ? AND password_hash = ?
+    """, (req.email.lower().strip(), hashed_pw))
+    user = cursor.fetchone()
+    
+    if not user:
+        conn.close()
+        raise HTTPException(status_code=401, detail="Invalid email or password.")
+    if user["is_active"] == 0:
+        conn.close()
+        raise HTTPException(status_code=403, detail="Account is suspended. Please contact your administrator.")
+    
+    cursor.execute("UPDATE users SET last_login = datetime('now') WHERE id = ?", (user["id"],))
+    conn.commit()
+    conn.close()
+    
+    token = jwt.encode({"user_id": user["id"], "email": user["email"], "role": user["role"]}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {
+        "status": "success",
+        "token": token,
+        "user": {
+            "id": user["id"],
+            "email": user["email"],
+            "full_name": user["full_name"],
+            "organization": user["organization"],
+            "role": user["role"],
+            "default_region": user["default_region"]
+        }
+    }
+
+@app.post("/api/v1/auth/register")
+def api_auth_register(req: RegisterRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id FROM users WHERE LOWER(email) = ?", (req.email.lower().strip(),))
+    if cursor.fetchone():
+        conn.close()
+        raise HTTPException(status_code=400, detail="An account with this email address already exists.")
+    
+    hashed_pw = _hash_pw(req.password)
+    cursor.execute("""
+    INSERT INTO users (email, password_hash, full_name, organization, role, default_region, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, datetime('now'))
+    """, (req.email.lower().strip(), hashed_pw, req.full_name, req.organization, req.role or 'auditor', req.default_region or 'DE'))
+    conn.commit()
+    user_id = cursor.lastrowid
+    conn.close()
+    
+    user_role = req.role or 'auditor'
+    token = jwt.encode({"user_id": user_id, "email": req.email, "role": user_role}, JWT_SECRET, algorithm=JWT_ALGORITHM)
+    return {
+        "status": "success",
+        "token": token,
+        "user": {
+            "id": user_id,
+            "email": req.email,
+            "full_name": req.full_name,
+            "organization": req.organization,
+            "role": user_role,
+            "default_region": req.default_region or 'DE'
+        }
+    }
+
+@app.get("/api/v1/admin/rules")
+def api_admin_get_rules():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM custom_rules ORDER BY priority ASC, id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/v1/admin/rules")
+def api_admin_save_rule(req: RuleRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    if req.id:
+        cursor.execute("""
+        UPDATE custom_rules 
+        SET rule_name=?, rule_type=?, condition_field=?, condition_operator=?, 
+            condition_value=?, target_action=?, target_value=?, priority=?, is_active=?, updated_at=?
+        WHERE id = ?
+        """, (req.rule_name, req.rule_type, req.condition_field, req.condition_operator, 
+              req.condition_value, req.target_action, req.target_value, req.priority, req.is_active, now_str, req.id))
+    else:
+        cursor.execute("""
+        INSERT INTO custom_rules 
+        (rule_name, rule_type, condition_field, condition_operator, condition_value, target_action, target_value, priority, is_active, updated_by, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'admin@carbonledger.io', ?)
+        """, (req.rule_name, req.rule_type, req.condition_field, req.condition_operator, 
+              req.condition_value, req.target_action, req.target_value, req.priority, req.is_active, now_str))
+    
+    cursor.execute("INSERT INTO admin_audit_logs (timestamp, user_email, action_type, target_module, new_value) VALUES (?, 'admin@carbonledger.io', 'SAVE_RULE', 'Rules Engine', ?)",
+                   (now_str, f"Rule: {req.rule_name} ({req.target_action} -> {req.target_value})"))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.delete("/api/v1/admin/rules/{rule_id}")
+def api_admin_delete_rule(rule_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    cursor.execute("DELETE FROM custom_rules WHERE id = ?", (rule_id,))
+    cursor.execute("INSERT INTO admin_audit_logs (timestamp, user_email, action_type, target_module, old_value) VALUES (?, 'admin@carbonledger.io', 'DELETE_RULE', 'Rules Engine', ?)",
+                   (now_str, f"Rule ID #{rule_id}"))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.get("/api/v1/admin/factors")
+def api_admin_get_factors():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM factor_overrides ORDER BY id DESC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.post("/api/v1/admin/factors")
+def api_admin_save_factor(req: FactorOverrideRequest):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    now_str = time.strftime("%Y-%m-%d %H:%M:%S")
+    if req.id:
+        cursor.execute("""
+        UPDATE factor_overrides 
+        SET material_pattern=?, region=?, scope=?, custom_emission_factor=?, unit=?, source_name=?, reason=?, updated_at=?
+        WHERE id = ?
+        """, (req.material_pattern, req.region, req.scope, req.custom_emission_factor, req.unit, req.source_name, req.reason, now_str, req.id))
+    else:
+        cursor.execute("""
+        INSERT INTO factor_overrides (material_pattern, region, scope, custom_emission_factor, unit, source_name, reason, updated_by, updated_at)
+        VALUES (?, ?, ?, ?, ?, ?, ?, 'admin@carbonledger.io', ?)
+        """, (req.material_pattern, req.region, req.scope, req.custom_emission_factor, req.unit, req.source_name, req.reason, now_str))
+    
+    cursor.execute("INSERT INTO admin_audit_logs (timestamp, user_email, action_type, target_module, new_value) VALUES (?, 'admin@carbonledger.io', 'SAVE_FACTOR_OVERRIDE', 'Factor Overrides', ?)",
+                   (now_str, f"{req.material_pattern} ({req.region}) -> {req.custom_emission_factor} kg CO2e/{req.unit}"))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.get("/api/v1/admin/users")
+def api_admin_get_users():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT id, email, full_name, organization, role, default_region, is_active, created_at, last_login FROM users ORDER BY id ASC")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
+@app.patch("/api/v1/admin/users/{user_id}/status")
+def api_admin_toggle_user_status(user_id: int):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET is_active = CASE WHEN is_active = 1 THEN 0 ELSE 1 END WHERE id = ?", (user_id,))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.patch("/api/v1/admin/users/{user_id}/role")
+def api_admin_update_user_role(user_id: int, payload: UserRoleUpdate):
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("UPDATE users SET role = ? WHERE id = ?", (payload.role, user_id))
+    conn.commit()
+    conn.close()
+    return {"status": "success"}
+
+@app.get("/api/v1/admin/audit-logs")
+def api_admin_get_audit_logs():
+    conn = get_db_connection()
+    cursor = conn.cursor()
+    cursor.execute("SELECT * FROM admin_audit_logs ORDER BY id DESC LIMIT 100")
+    rows = cursor.fetchall()
+    conn.close()
+    return [dict(r) for r in rows]
+
 @app.get("/api/reports/download")
 def download_universal_report(name: Optional[str] = None, path: Optional[str] = None):
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))

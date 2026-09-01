@@ -49,6 +49,163 @@ export default function DashboardApp() {
   const [forecastResult, setForecastResult] = useState(null);
   const [isForecastLoading, setIsForecastLoading] = useState(false);
 
+  // Authentication State
+  const [currentUser, setCurrentUser] = useState(() => {
+    try {
+      const saved = localStorage.getItem('carbonledger_user');
+      return saved ? JSON.parse(saved) : null;
+    } catch (e) {
+      return null;
+    }
+  });
+  const [authMode, setAuthMode] = useState('login'); // 'login' or 'signup'
+  const [authEmail, setAuthEmail] = useState('');
+  const [authPassword, setAuthPassword] = useState('');
+  const [authFullName, setAuthFullName] = useState('');
+  const [authOrg, setAuthOrg] = useState('');
+  const [authRegion, setAuthRegion] = useState('DE');
+  const [authRole, setAuthRole] = useState('auditor');
+  const [authError, setAuthError] = useState('');
+  const [isAuthLoading, setIsAuthLoading] = useState(false);
+
+  // Admin Console States
+  const [adminSubTab, setAdminSubTab] = useState('rules'); // 'rules', 'factors', 'cbam', 'safeguards', 'users', 'audit'
+  const [adminRules, setAdminRules] = useState([]);
+  const [adminFactors, setAdminFactors] = useState([]);
+  const [adminUsers, setAdminUsers] = useState([]);
+  const [adminAuditLogs, setAdminAuditLogs] = useState([]);
+  const [adminSuccessMsg, setAdminSuccessMsg] = useState('');
+
+  const [newRule, setNewRule] = useState({
+    rule_name: '',
+    rule_type: 'scope_routing',
+    condition_field: 'material',
+    condition_operator: 'contains',
+    condition_value: '',
+    target_action: 'set_scope',
+    target_value: 'Scope 3',
+    priority: 10,
+    is_active: 1
+  });
+
+  const [newFactor, setNewFactor] = useState({
+    material_pattern: '',
+    region: 'DE',
+    scope: 'Scope 3',
+    custom_emission_factor: 0.0,
+    unit: 'kg',
+    source_name: 'Supplier EPD',
+    reason: 'Custom Org Override'
+  });
+
+  // Auth Handlers
+  const handleAuthLogin = (email, password) => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    fetch('http://localhost:8000/api/v1/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password })
+    })
+    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(({ status, body }) => {
+      setIsAuthLoading(false);
+      if (status !== 200) throw new Error(body.detail || 'Login failed.');
+      localStorage.setItem('carbonledger_token', body.token);
+      localStorage.setItem('carbonledger_user', JSON.stringify(body.user));
+      setCurrentUser(body.user);
+    })
+    .catch(err => {
+      setIsAuthLoading(false);
+      setAuthError(err.message);
+    });
+  };
+
+  const handleAuthRegister = () => {
+    setIsAuthLoading(true);
+    setAuthError('');
+    fetch('http://localhost:8000/api/v1/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        email: authEmail,
+        password: authPassword,
+        full_name: authFullName,
+        organization: authOrg,
+        default_region: authRegion,
+        role: authRole
+      })
+    })
+    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(({ status, body }) => {
+      setIsAuthLoading(false);
+      if (status !== 200) throw new Error(body.detail || 'Registration failed.');
+      localStorage.setItem('carbonledger_token', body.token);
+      localStorage.setItem('carbonledger_user', JSON.stringify(body.user));
+      setCurrentUser(body.user);
+    })
+    .catch(err => {
+      setIsAuthLoading(false);
+      setAuthError(err.message);
+    });
+  };
+
+  const handleAuthLogout = () => {
+    localStorage.removeItem('carbonledger_token');
+    localStorage.removeItem('carbonledger_user');
+    setCurrentUser(null);
+    setActiveTab('Dashboard');
+  };
+
+  const fetchAdminData = () => {
+    fetch('http://localhost:8000/api/v1/admin/rules').then(res => res.json()).then(data => setAdminRules(data || [])).catch(() => {});
+    fetch('http://localhost:8000/api/v1/admin/factors').then(res => res.json()).then(data => setAdminFactors(data || [])).catch(() => {});
+    fetch('http://localhost:8000/api/v1/admin/users').then(res => res.json()).then(data => setAdminUsers(data || [])).catch(() => {});
+    fetch('http://localhost:8000/api/v1/admin/audit-logs').then(res => res.json()).then(data => setAdminAuditLogs(data || [])).catch(() => {});
+  };
+
+  useEffect(() => {
+    if (activeTab === 'Admin Console') {
+      fetchAdminData();
+    }
+  }, [activeTab]);
+
+  const handleSaveRule = () => {
+    if (!newRule.rule_name || !newRule.condition_value || !newRule.target_value) return;
+    fetch('http://localhost:8000/api/v1/admin/rules', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newRule)
+    }).then(() => {
+      setAdminSuccessMsg('Rule saved successfully!');
+      setTimeout(() => setAdminSuccessMsg(''), 3000);
+      setNewRule({ rule_name: '', rule_type: 'scope_routing', condition_field: 'material', condition_operator: 'contains', condition_value: '', target_action: 'set_scope', target_value: 'Scope 3', priority: 10, is_active: 1 });
+      fetchAdminData();
+    });
+  };
+
+  const handleDeleteRule = (ruleId) => {
+    fetch(`http://localhost:8000/api/v1/admin/rules/${ruleId}`, { method: 'DELETE' }).then(() => fetchAdminData());
+  };
+
+  const handleSaveFactorOverride = () => {
+    if (!newFactor.material_pattern || !newFactor.custom_emission_factor) return;
+    fetch('http://localhost:8000/api/v1/admin/factors', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newFactor)
+    }).then(() => {
+      setAdminSuccessMsg('Factor override saved successfully!');
+      setTimeout(() => setAdminSuccessMsg(''), 3000);
+      setNewFactor({ material_pattern: '', region: 'DE', scope: 'Scope 3', custom_emission_factor: 0.0, unit: 'kg', source_name: 'Supplier EPD', reason: 'Custom Org Override' });
+      fetchAdminData();
+    });
+  };
+
+  const handleToggleUserStatus = (userId) => {
+    fetch(`http://localhost:8000/api/v1/admin/users/${userId}/status`, { method: 'PATCH' }).then(() => fetchAdminData());
+  };
+
   // Theme Styling Tokens (Vibrant Dark Mode / Harmonious Light Mode)
   const themeBg = isDarkMode ? '#080c14' : '#f8fafc';
   const themeCard = isDarkMode ? '#111827' : '#ffffff';
@@ -59,13 +216,19 @@ export default function DashboardApp() {
   const receivedEmptyState = universalStatus === 'parsed' && (!parserResponse || !reviewedRecords || reviewedRecords.length === 0);
   const effectiveError = parserPipelineError || (receivedEmptyState ? "Parser response missing." : "");
 
-  const getAllowedTabs = () => [
-    { name: 'Dashboard', icon: '📊' },
-    { name: 'Upload', icon: '📤' },
-    { name: 'Reports', icon: '📑' },
-    { name: 'AI Intelligence', icon: '🧠' },
-    { name: 'Settings', icon: '⚙️' }
-  ];
+  const getAllowedTabs = () => {
+    const tabs = [
+      { name: 'Dashboard', icon: '📊' },
+      { name: 'Upload', icon: '📤' },
+      { name: 'Reports', icon: '📑' },
+      { name: 'AI Intelligence', icon: '🧠' },
+      { name: 'Settings', icon: '⚙️' }
+    ];
+    if (currentUser && currentUser.role === 'admin') {
+      tabs.push({ name: 'Admin Console', icon: '🛡️' });
+    }
+    return tabs;
+  };
 
   // Fetch Settings & Latest Upload on Mount
   useEffect(() => {
@@ -617,6 +780,120 @@ export default function DashboardApp() {
   const linePath = pts.map((p, idx) => (idx === 0 ? `M ${p.x} ${p.y}` : `L ${p.x} ${p.y}`)).join(' ');
   const areaPath = pts.length ? `${linePath} L ${pts[pts.length - 1].x} ${svgH - 10} L ${pts[0].x} ${svgH - 10} Z` : '';
 
+  if (!currentUser) {
+    return (
+      <div style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', backgroundColor: isDarkMode ? '#080c14' : '#f8fafc', fontFamily: 'Outfit, Inter, sans-serif' }}>
+        <div style={{ width: '420px', padding: '36px', borderRadius: '16px', backgroundColor: isDarkMode ? '#111827' : '#ffffff', border: `1px solid ${isDarkMode ? '#1f2937' : '#e2e8f0'}`, boxShadow: '0 20px 25px -5px rgba(0,0,0,0.1)' }}>
+          <div style={{ textAlign: 'center', marginBottom: '24px' }}>
+            <div style={{ fontSize: '36px', marginBottom: '8px' }}>🍃</div>
+            <h2 style={{ margin: 0, fontSize: '24px', fontWeight: '800', color: '#10b981' }}>CarbonLedger OS</h2>
+            <p style={{ margin: '6px 0 0', fontSize: '13px', color: themeSubtext }}>Enterprise Carbon Accounting & CBAM Platform</p>
+          </div>
+
+          {authError && (
+            <div style={{ padding: '10px 14px', borderRadius: '8px', backgroundColor: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#f87171', fontSize: '12px', marginBottom: '16px' }}>
+              ⚠️ {authError}
+            </div>
+          )}
+
+          <div style={{ display: 'flex', gap: '8px', marginBottom: '20px', backgroundColor: isDarkMode ? '#1f2937' : '#f1f5f9', padding: '4px', borderRadius: '8px' }}>
+            <button 
+              onClick={() => setAuthMode('login')} 
+              style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', backgroundColor: authMode === 'login' ? '#10b981' : 'transparent', color: authMode === 'login' ? '#fff' : themeSubtext, fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
+              Sign In
+            </button>
+            <button 
+              onClick={() => setAuthMode('signup')} 
+              style={{ flex: 1, padding: '8px', borderRadius: '6px', border: 'none', backgroundColor: authMode === 'signup' ? '#10b981' : 'transparent', color: authMode === 'signup' ? '#fff' : themeSubtext, fontWeight: 'bold', cursor: 'pointer', fontSize: '13px' }}>
+              Sign Up
+            </button>
+          </div>
+
+          <form onSubmit={(e) => { 
+            e.preventDefault(); 
+            if (authMode === 'login') handleAuthLogin(authEmail, authPassword); 
+            else handleAuthRegister();
+          }}>
+            {authMode === 'signup' && (
+              <>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px', color: themeText }}>Full Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={authFullName} 
+                    onChange={e => setAuthFullName(e.target.value)} 
+                    placeholder="Jane Doe" 
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#ffffff', color: themeText, fontSize: '13px' }} 
+                  />
+                </div>
+                <div style={{ marginBottom: '14px' }}>
+                  <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px', color: themeText }}>Organization Name</label>
+                  <input 
+                    type="text" 
+                    required
+                    value={authOrg} 
+                    onChange={e => setAuthOrg(e.target.value)} 
+                    placeholder="Siemens Energy ESG" 
+                    style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#ffffff', color: themeText, fontSize: '13px' }} 
+                  />
+                </div>
+              </>
+            )}
+
+            <div style={{ marginBottom: '14px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px', color: themeText }}>Corporate Email</label>
+              <input 
+                type="email" 
+                required
+                value={authEmail} 
+                onChange={e => setAuthEmail(e.target.value)} 
+                placeholder="auditor@company.com" 
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#ffffff', color: themeText, fontSize: '13px' }} 
+              />
+            </div>
+
+            <div style={{ marginBottom: '20px' }}>
+              <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '4px', color: themeText }}>Password</label>
+              <input 
+                type="password" 
+                required
+                value={authPassword} 
+                onChange={e => setAuthPassword(e.target.value)} 
+                placeholder="••••••••" 
+                style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#ffffff', color: themeText, fontSize: '13px' }} 
+              />
+            </div>
+
+            <button 
+              type="submit" 
+              disabled={isAuthLoading}
+              style={{ width: '100%', padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#080c14', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
+              {isAuthLoading ? 'Authenticating...' : (authMode === 'login' ? 'Sign In' : 'Create Account')}
+            </button>
+          </form>
+
+          {/* Quick Demo Access Buttons */}
+          <div style={{ marginTop: '24px', paddingTop: '16px', borderTop: `1px solid ${themeBorder}`, textAlign: 'center' }}>
+            <span style={{ fontSize: '11px', color: themeSubtext, display: 'block', marginBottom: '10px', textTransform: 'uppercase', letterSpacing: '0.05em', fontWeight: 'bold' }}>One-Click Demo Authentication</span>
+            <div style={{ display: 'flex', gap: '8px', justifyContent: 'center' }}>
+              <button 
+                onClick={() => handleAuthLogin('admin@carbonledger.io', 'Admin@12345')} 
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #8b5cf6', background: 'rgba(139,92,246,0.15)', color: '#c084fc', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+                🔑 Admin
+              </button>
+              <button 
+                onClick={() => handleAuthLogin('auditor@carbonledger.io', 'Auditor@12345')} 
+                style={{ padding: '8px 12px', borderRadius: '6px', border: '1px solid #10b981', background: 'rgba(16,185,129,0.15)', color: '#34d399', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+                🔍 Auditor
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div style={{ backgroundColor: themeBg, color: themeText, minHeight: '100vh', display: 'flex', fontFamily: 'Outfit, Inter, sans-serif' }}>
       
@@ -732,6 +1009,7 @@ export default function DashboardApp() {
               {activeTab === 'Reports' && 'Download compliance and ESG reports generated from this session'}
               {activeTab === 'AI Intelligence' && 'Interact with AI Copilot, run what-if scenario simulations, and CBAM cost forecasts'}
               {activeTab === 'Settings' && 'Configure CBAM pricing, reporting region, and user profile'}
+              {activeTab === 'Admin Console' && 'Enterprise governance, dynamic calculation rules, emission factor overrides, and audit trails'}
             </span>
           </div>
 
@@ -740,7 +1018,17 @@ export default function DashboardApp() {
               ● LIVE SESSION ACTIVE
             </span>
             <div style={{ width: '1px', height: '20px', backgroundColor: themeBorder }}></div>
-            <div style={{ fontSize: '13px', fontWeight: '600', color: themeText }}>{userProfile.name}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+              <div style={{ textAlign: 'right' }}>
+                <div style={{ fontSize: '13px', fontWeight: '700', color: themeText }}>{currentUser.full_name}</div>
+                <div style={{ fontSize: '10px', color: '#10b981', fontWeight: '700', textTransform: 'uppercase' }}>{currentUser.role} • {currentUser.organization}</div>
+              </div>
+              <button 
+                onClick={handleAuthLogout} 
+                style={{ padding: '6px 12px', borderRadius: '8px', background: 'rgba(239,68,68,0.15)', border: '1px solid #ef4444', color: '#f87171', cursor: 'pointer', fontSize: '11px', fontWeight: 'bold' }}>
+                Sign Out
+              </button>
+            </div>
           </div>
         </header>
 
@@ -2149,6 +2437,443 @@ export default function DashboardApp() {
 
               </div>
             </div>
+          </div>
+        )}
+
+        {/* --- TAB 6: ENTERPRISE ADMIN CONSOLE --- */}
+        {activeTab === 'Admin Console' && (
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+            
+            {/* Admin Header & Success Toast */}
+            {adminSuccessMsg && (
+              <div style={{ padding: '12px 18px', borderRadius: '10px', backgroundColor: 'rgba(16,185,129,0.15)', border: '1px solid #10b981', color: '#34d399', fontSize: '13px', fontWeight: 'bold' }}>
+                ✅ {adminSuccessMsg}
+              </div>
+            )}
+
+            {/* Admin Navigation Pills */}
+            <div style={{ display: 'flex', gap: '8px', backgroundColor: themeCard, padding: '6px', borderRadius: '12px', border: `1px solid ${themeBorder}`, flexWrap: 'wrap' }}>
+              {[
+                { id: 'rules', label: '⚙️ Calculation Rules' },
+                { id: 'factors', label: '🏷️ Factor Overrides' },
+                { id: 'cbam', label: '📊 CBAM Benchmarks' },
+                { id: 'safeguards', label: '🛡️ AI Quality Safeguards' },
+                { id: 'users', label: '👥 User Governance' },
+                { id: 'audit', label: '📜 Audit Log' }
+              ].map(st => (
+                <button
+                  key={st.id}
+                  onClick={() => setAdminSubTab(st.id)}
+                  style={{
+                    padding: '10px 18px',
+                    borderRadius: '8px',
+                    border: 'none',
+                    backgroundColor: adminSubTab === st.id ? '#10b981' : 'transparent',
+                    color: adminSubTab === st.id ? '#080c14' : themeSubtext,
+                    fontWeight: 'bold',
+                    cursor: 'pointer',
+                    fontSize: '13px',
+                    transition: 'all 0.2s'
+                  }}
+                >
+                  {st.label}
+                </button>
+              ))}
+            </div>
+
+            {/* 1. CALCULATION RULES SUB-TAB */}
+            {adminSubTab === 'rules' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0', color: '#10b981' }}>➕ Create Dynamic Calculation Rule</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Rule Name</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Steel Scrap Scope Routing"
+                        value={newRule.rule_name}
+                        onChange={e => setNewRule({ ...newRule, rule_name: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Condition Field</label>
+                      <select 
+                        value={newRule.condition_field}
+                        onChange={e => setNewRule({ ...newRule, condition_field: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}>
+                        <option value="material">Material Name</option>
+                        <option value="supplier">Supplier Name</option>
+                        <option value="hs_code">HS Tariff Code</option>
+                        <option value="quantity">Quantity Value</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Operator</label>
+                      <select 
+                        value={newRule.condition_operator}
+                        onChange={e => setNewRule({ ...newRule, condition_operator: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}>
+                        <option value="contains">Contains Keyword</option>
+                        <option value="equals">Equals Exactly</option>
+                        <option value="regex">Regex Pattern</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Match Value</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. scrap"
+                        value={newRule.condition_value}
+                        onChange={e => setNewRule({ ...newRule, condition_value: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '14px', alignItems: 'end' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Target Action</label>
+                      <select 
+                        value={newRule.target_action}
+                        onChange={e => setNewRule({ ...newRule, target_action: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}>
+                        <option value="set_scope">Route to Scope (Scope 1/2/3)</option>
+                        <option value="set_factor">Override Emission Factor</option>
+                        <option value="force_review">Force Auditor Review</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Action Value</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Scope 3 or 0.0"
+                        value={newRule.target_value}
+                        onChange={e => setNewRule({ ...newRule, target_value: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Priority (Lower runs first)</label>
+                      <input 
+                        type="number" 
+                        value={newRule.priority}
+                        onChange={e => setNewRule({ ...newRule, priority: parseInt(e.target.value) || 10 })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSaveRule}
+                      style={{ padding: '9px 20px', borderRadius: '6px', backgroundColor: '#10b981', border: 'none', color: '#080c14', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
+                      Add Rule
+                    </button>
+                  </div>
+                </div>
+
+                {/* Active Rules List */}
+                <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0' }}>📋 Active Engine Rules ({adminRules.length})</h3>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${themeBorder}`, textAlign: 'left', color: themeSubtext, fontSize: '11px', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '8px' }}>Priority</th>
+                        <th style={{ padding: '8px' }}>Rule Name</th>
+                        <th style={{ padding: '8px' }}>Condition</th>
+                        <th style={{ padding: '8px' }}>Target Action</th>
+                        <th style={{ padding: '8px' }}>Updated By</th>
+                        <th style={{ padding: '8px' }}>Action</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminRules.map(r => (
+                        <tr key={r.id} style={{ borderBottom: `1px solid ${themeBorder}` }}>
+                          <td style={{ padding: '8px', fontWeight: 'bold', color: '#10b981' }}>#{r.priority}</td>
+                          <td style={{ padding: '8px', fontWeight: 'bold' }}>{r.rule_name}</td>
+                          <td style={{ padding: '8px' }}><code>{r.condition_field}</code> {r.condition_operator} <strong>"{r.condition_value}"</strong></td>
+                          <td style={{ padding: '8px', color: '#3b82f6', fontWeight: '600' }}>{r.target_action} ➔ {r.target_value}</td>
+                          <td style={{ padding: '8px', color: themeSubtext, fontSize: '11px' }}>{r.updated_by}</td>
+                          <td style={{ padding: '8px' }}>
+                            <button 
+                              onClick={() => handleDeleteRule(r.id)} 
+                              style={{ padding: '4px 10px', borderRadius: '4px', border: '1px solid #ef4444', background: 'rgba(239,68,68,0.15)', color: '#f87171', cursor: 'pointer', fontSize: '11px' }}>
+                              Delete
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 2. FACTOR OVERRIDES SUB-TAB */}
+            {adminSubTab === 'factors' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
+                <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0', color: '#10b981' }}>🏷️ Add Supplier & Regional Factor Override</h3>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '14px', marginBottom: '16px' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Material Pattern</label>
+                      <input 
+                        type="text" 
+                        placeholder="e.g. Green Steel EAF"
+                        value={newFactor.material_pattern}
+                        onChange={e => setNewFactor({ ...newFactor, material_pattern: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Region</label>
+                      <select 
+                        value={newFactor.region}
+                        onChange={e => setNewFactor({ ...newFactor, region: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}>
+                        <option value="DE">Germany (DE)</option>
+                        <option value="IN">India (IN)</option>
+                        <option value="US">United States (US)</option>
+                        <option value="FR">France (FR)</option>
+                        <option value="GB">United Kingdom (GB)</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Scope</label>
+                      <select 
+                        value={newFactor.scope}
+                        onChange={e => setNewFactor({ ...newFactor, scope: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}>
+                        <option value="Scope 1">Scope 1</option>
+                        <option value="Scope 2">Scope 2</option>
+                        <option value="Scope 3">Scope 3</option>
+                      </select>
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Custom Emission Factor (kg CO₂e/unit)</label>
+                      <input 
+                        type="number" 
+                        step="0.001"
+                        value={newFactor.custom_emission_factor}
+                        onChange={e => setNewFactor({ ...newFactor, custom_emission_factor: parseFloat(e.target.value) || 0.0 })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr auto', gap: '14px', alignItems: 'end' }}>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Unit</label>
+                      <input 
+                        type="text" 
+                        placeholder="kg"
+                        value={newFactor.unit}
+                        onChange={e => setNewFactor({ ...newFactor, unit: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Source / EPD Certification</label>
+                      <input 
+                        type="text" 
+                        placeholder="Supplier EPD Certificate #4892"
+                        value={newFactor.source_name}
+                        onChange={e => setNewFactor({ ...newFactor, source_name: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <div>
+                      <label style={{ display: 'block', fontSize: '11px', fontWeight: 'bold', color: themeSubtext, marginBottom: '4px' }}>Reason</label>
+                      <input 
+                        type="text" 
+                        placeholder="Audited EAF Facility Data"
+                        value={newFactor.reason}
+                        onChange={e => setNewFactor({ ...newFactor, reason: e.target.value })}
+                        style={{ width: '100%', boxSizing: 'border-box', padding: '8px 10px', borderRadius: '6px', backgroundColor: isDarkMode ? '#080c14' : '#fff', border: `1px solid ${themeBorder}`, color: themeText, fontSize: '12px' }}
+                      />
+                    </div>
+                    <button 
+                      onClick={handleSaveFactorOverride}
+                      style={{ padding: '9px 20px', borderRadius: '6px', backgroundColor: '#10b981', border: 'none', color: '#080c14', fontWeight: 'bold', fontSize: '13px', cursor: 'pointer' }}>
+                      Save Override
+                    </button>
+                  </div>
+                </div>
+
+                {/* Overrides Table */}
+                <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                  <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0' }}>📋 Emission Factor Overrides ({adminFactors.length})</h3>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                    <thead>
+                      <tr style={{ borderBottom: `1px solid ${themeBorder}`, textAlign: 'left', color: themeSubtext, fontSize: '11px', textTransform: 'uppercase' }}>
+                        <th style={{ padding: '8px' }}>Pattern</th>
+                        <th style={{ padding: '8px' }}>Region</th>
+                        <th style={{ padding: '8px' }}>Scope</th>
+                        <th style={{ padding: '8px' }}>Factor</th>
+                        <th style={{ padding: '8px' }}>Source</th>
+                        <th style={{ padding: '8px' }}>Reason</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {adminFactors.map(f => (
+                        <tr key={f.id} style={{ borderBottom: `1px solid ${themeBorder}` }}>
+                          <td style={{ padding: '8px', fontWeight: 'bold' }}>{f.material_pattern}</td>
+                          <td style={{ padding: '8px' }}><span style={{ backgroundColor: 'rgba(59,130,246,0.15)', color: '#60a5fa', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>{f.region}</span></td>
+                          <td style={{ padding: '8px' }}>{f.scope}</td>
+                          <td style={{ padding: '8px', color: '#10b981', fontWeight: 'bold' }}>{f.custom_emission_factor} kg CO₂e/{f.unit}</td>
+                          <td style={{ padding: '8px' }}>{f.source_name}</td>
+                          <td style={{ padding: '8px', color: themeSubtext }}>{f.reason}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            )}
+
+            {/* 3. CBAM BENCHMARKS SUB-TAB */}
+            {adminSubTab === 'cbam' && (
+              <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}`, maxWidth: '600px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0', color: '#10b981' }}>📊 CBAM & EU ETS Economic Benchmarks</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>EU ETS Carbon Price Benchmark (€ / Tonne CO₂e)</label>
+                    <input 
+                      type="number" 
+                      value={carbonPrice}
+                      onChange={e => setCarbonPrice(parseFloat(e.target.value) || 0.0)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#fff', color: themeText, fontSize: '13px' }}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>Default Reporting Region</label>
+                    <select 
+                      value={defaultRegion}
+                      onChange={e => setDefaultRegion(e.target.value)}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#fff', color: themeText, fontSize: '13px' }}>
+                      <option value="DE">Germany (DE)</option>
+                      <option value="IN">India (IN)</option>
+                      <option value="US">United States (US)</option>
+                      <option value="FR">France (FR)</option>
+                      <option value="GB">United Kingdom (GB)</option>
+                    </select>
+                  </div>
+                  <button 
+                    onClick={handleSaveSettings}
+                    style={{ padding: '12px', borderRadius: '8px', border: 'none', backgroundColor: '#10b981', color: '#080c14', fontWeight: 'bold', fontSize: '14px', cursor: 'pointer' }}>
+                    Save Benchmarks
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {/* 4. AI QUALITY SAFEGUARDS SUB-TAB */}
+            {adminSubTab === 'safeguards' && (
+              <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}`, maxWidth: '600px' }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0', color: '#10b981' }}>🛡️ AI Quality Gates & Thresholds</h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>OCR Confidence Gate Trigger (%)</label>
+                    <input 
+                      type="number" 
+                      defaultValue={90}
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#fff', color: themeText, fontSize: '13px' }}
+                    />
+                    <span style={{ fontSize: '11px', color: themeSubtext }}>Documents below this confidence score are automatically routed to manual auditor review.</span>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px' }}>Anomaly Detection Multiplier (x Std Dev)</label>
+                    <input 
+                      type="number" 
+                      defaultValue={4.0}
+                      step="0.5"
+                      style={{ width: '100%', boxSizing: 'border-box', padding: '10px 12px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#fff', color: themeText, fontSize: '13px' }}
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {/* 5. USER GOVERNANCE SUB-TAB */}
+            {adminSubTab === 'users' && (
+              <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0' }}>👥 User Accounts & Governance ({adminUsers.length})</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${themeBorder}`, textAlign: 'left', color: themeSubtext, fontSize: '11px', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '8px' }}>User</th>
+                      <th style={{ padding: '8px' }}>Organization</th>
+                      <th style={{ padding: '8px' }}>Role</th>
+                      <th style={{ padding: '8px' }}>Status</th>
+                      <th style={{ padding: '8px' }}>Last Login</th>
+                      <th style={{ padding: '8px' }}>Action</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminUsers.map(u => (
+                      <tr key={u.id} style={{ borderBottom: `1px solid ${themeBorder}` }}>
+                        <td style={{ padding: '8px' }}>
+                          <div style={{ fontWeight: 'bold' }}>{u.full_name}</div>
+                          <div style={{ fontSize: '11px', color: themeSubtext }}>{u.email}</div>
+                        </td>
+                        <td style={{ padding: '8px' }}>{u.organization}</td>
+                        <td style={{ padding: '8px' }}>
+                          <span style={{ 
+                            padding: '3px 8px', borderRadius: '4px', fontSize: '11px', fontWeight: 'bold',
+                            backgroundColor: u.role === 'admin' ? 'rgba(139,92,246,0.15)' : 'rgba(16,185,129,0.15)',
+                            color: u.role === 'admin' ? '#c084fc' : '#34d399'
+                          }}>
+                            {u.role.toUpperCase()}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px' }}>
+                          <span style={{ color: u.is_active ? '#10b981' : '#f87171', fontWeight: 'bold' }}>
+                            {u.is_active ? '● Active' : '○ Suspended'}
+                          </span>
+                        </td>
+                        <td style={{ padding: '8px', color: themeSubtext, fontSize: '11px' }}>{u.last_login || 'Never'}</td>
+                        <td style={{ padding: '8px' }}>
+                          <button 
+                            onClick={() => handleToggleUserStatus(u.id)}
+                            style={{ padding: '4px 10px', borderRadius: '4px', border: '1px solid #3b82f6', background: 'rgba(59,130,246,0.15)', color: '#60a5fa', cursor: 'pointer', fontSize: '11px' }}>
+                            {u.is_active ? 'Suspend' : 'Activate'}
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
+            {/* 6. AUDIT LOG SUB-TAB */}
+            {adminSubTab === 'audit' && (
+              <div style={{ backgroundColor: themeCard, padding: '24px', borderRadius: '16px', border: `1px solid ${themeBorder}` }}>
+                <h3 style={{ fontSize: '16px', fontWeight: 'bold', margin: '0 0 16px 0' }}>📜 Configuration Audit Log</h3>
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
+                  <thead>
+                    <tr style={{ borderBottom: `1px solid ${themeBorder}`, textAlign: 'left', color: themeSubtext, fontSize: '11px', textTransform: 'uppercase' }}>
+                      <th style={{ padding: '8px' }}>Timestamp</th>
+                      <th style={{ padding: '8px' }}>Admin</th>
+                      <th style={{ padding: '8px' }}>Action</th>
+                      <th style={{ padding: '8px' }}>Module</th>
+                      <th style={{ padding: '8px' }}>Details</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {adminAuditLogs.map(a => (
+                      <tr key={a.id} style={{ borderBottom: `1px solid ${themeBorder}` }}>
+                        <td style={{ padding: '8px', color: themeSubtext }}>{a.timestamp}</td>
+                        <td style={{ padding: '8px', fontWeight: 'bold' }}>{a.user_email}</td>
+                        <td style={{ padding: '8px' }}><span style={{ backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981', padding: '2px 6px', borderRadius: '4px', fontWeight: 'bold' }}>{a.action_type}</span></td>
+                        <td style={{ padding: '8px' }}>{a.target_module}</td>
+                        <td style={{ padding: '8px', color: themeText }}>{a.new_value || a.old_value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+
           </div>
         )}
 
