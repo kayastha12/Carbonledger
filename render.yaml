@@ -6,7 +6,7 @@ services:
     name: carbonledger-api
     runtime: python
     buildCommand: pip install --upgrade pip && pip install --extra-index-url https://download.pytorch.org/whl/cpu -r requirements.txt
-    startCommand: uvicorn api.main:app --host 0.0.0.0 --port $PORT --workers 1
+    startCommand: python run_server.py
     plan: free
     envVars:
       - key: PYTHON_VERSION

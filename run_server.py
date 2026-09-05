@@ -1,5 +1,8 @@
+import os
 import uvicorn
-import api.main
 
 if __name__ == '__main__':
-    uvicorn.run('api.main:app', host='127.0.0.1', port=8000, log_level='info')
+    port = int(os.environ.get("PORT", 8000))
+    print(f"[Server] Starting CarbonLedger API on host 0.0.0.0:{port}...")
+    uvicorn.run('api.main:app', host='0.0.0.0', port=port, log_level='info')
+

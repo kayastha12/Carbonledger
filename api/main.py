@@ -58,6 +58,11 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.get("/")
+@app.get("/health")
+def health_check():
+    return {"status": "healthy", "service": "CarbonLedger Enterprise Sustainability OS API", "version": "7.0"}
+
 # Services Instantiation
 factor_service = EmissionFactorService.get_instance()
 classifier = DocumentClassifier()
