@@ -1,0 +1,200 @@
+{
+  "PURCHASE_INVOICE": {
+    "keywords": {
+      "invoice": 2,
+      "invoice number": 3,
+      "invoice id": 3,
+      "invoice upload": 4,
+      "supplier": 1,
+      "subtotal": 2,
+      "gst": 2,
+      "tax": 2,
+      "quantity": 1,
+      "unit price": 2,
+      "total amount": 2,
+      "purchase order": 2,
+      "description": 1
+    }
+  },
+  "PURCHASE_ORDER": {
+    "keywords": {
+      "purchase order": 4,
+      "purchase order upload": 4,
+      "po number": 3,
+      "po id": 3,
+      "delivery date": 3,
+      "status": 1
+    }
+  },
+  "SUPPLIER_MASTER": {
+    "keywords": {
+      "supplier master": 4,
+      "supplier master upload": 4,
+      "supplier id": 3,
+      "esg rating": 3,
+      "certification": 3,
+      "industry": 2
+    }
+  },
+  "LOGISTICS_SHIPPING": {
+    "keywords": {
+      "logistics": 4,
+      "shipping": 3,
+      "logistics & shipping": 4,
+      "ship id": 3,
+      "transport mode": 3,
+      "distance": 2,
+      "weight": 2,
+      "origin": 2,
+      "destination": 2
+    }
+  },
+  "UTILITY_BILL": {
+    "keywords": {
+      "utility": 4,
+      "utility bill": 4,
+      "utility bills upload": 4,
+      "bill id": 3,
+      "utility type": 3,
+      "consumption": 2,
+      "meter reading": 2
+    }
+  },
+  "FACILITY_PLANT": {
+    "keywords": {
+      "facility": 4,
+      "plant": 3,
+      "facility & plant": 4,
+      "plant id": 3,
+      "plant name": 3,
+      "capacity": 2,
+      "machines": 2,
+      "fuel used": 2
+    }
+  },
+  "MATERIAL_CONSUMPTION": {
+    "keywords": {
+      "material consumption": 4,
+      "material consumption upload": 4,
+      "material id": 3,
+      "material type": 3,
+      "production line": 3
+    }
+  },
+  "FUEL_CONSUMPTION": {
+    "keywords": {
+      "fuel consumption": 4,
+      "fuel consumption upload": 4,
+      "fuel id": 3,
+      "equipment": 2,
+      "vehicle/equipment": 3,
+      "meter reading": 2
+    }
+  },
+  "ELECTRICITY_GRID": {
+    "keywords": {
+      "electricity grid": 4,
+      "electricity grid upload": 4,
+      "grid id": 3,
+      "grid region": 3,
+      "state": 2,
+      "consumption": 2
+    }
+  },
+  "CBAM_PRODUCT_MAPPING": {
+    "keywords": {
+      "cbam": 4,
+      "cbam product mapping": 4,
+      "product id": 3,
+      "hs code": 3,
+      "cn code": 3,
+      "category": 2
+    }
+  },
+  "ELECTRICITY_BILL": {
+    "keywords": {
+      "electricity": 3,
+      "meter": 2,
+      "meter number": 3,
+      "kwh": 3,
+      "units consumed": 3,
+      "billing period": 3,
+      "energy": 2,
+      "tariff": 2,
+      "power grid": 3
+    }
+  },
+  "FUEL_INVOICE": {
+    "keywords": {
+      "diesel": 3,
+      "petrol": 3,
+      "fuel": 2,
+      "litres": 3,
+      "liter": 3,
+      "hsd": 3,
+      "cng": 3,
+      "lpg": 3,
+      "fuel station": 3,
+      "gasoline": 3
+    }
+  },
+  "TRANSPORTATION_INVOICE": {
+    "keywords": {
+      "transport": 3,
+      "freight": 3,
+      "truck": 2,
+      "lorry": 2,
+      "vehicle": 2,
+      "distance": 3,
+      "origin": 2,
+      "destination": 2,
+      "consignment": 3,
+      "carrier": 2,
+      "shipment weight": 2
+    }
+  },
+  "SHIPPING_MANIFEST": {
+    "keywords": {
+      "manifest": 3,
+      "shipment": 2,
+      "container": 3,
+      "cargo": 2,
+      "shipper": 3,
+      "consignee": 3,
+      "port": 2,
+      "vessel": 2,
+      "port of loading": 3,
+      "port of discharge": 3,
+      "bill of lading": 1
+    }
+  },
+  "BILL_OF_LADING": {
+    "keywords": {
+      "bill of lading": 4,
+      "b/l": 4,
+      "shipper": 3,
+      "consignee": 3,
+      "vessel": 2,
+      "port of loading": 3,
+      "port of discharge": 3
+    }
+  },
+  "DELIVERY_CHALLAN": {
+    "keywords": {
+      "delivery challan": 4,
+      "challan": 3,
+      "delivery": 2,
+      "goods received": 3,
+      "receiver": 2,
+      "dispatch": 2
+    }
+  },
+  "SUPPLIER_DECLARATION": {
+    "keywords": {
+      "supplier declaration": 4,
+      "declaration": 3,
+      "supplier statement": 4,
+      "product declaration": 4
+    }
+  }
+}

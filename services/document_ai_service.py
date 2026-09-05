@@ -6,14 +6,14 @@ import hashlib
 import re
 from typing import Dict, Any, List, Optional, Tuple
 
-# Ensure D:\internship\mlmodel\carbonledger-document-ai is accessible in sys.path
-DOC_AI_MODEL_DIR = r"D:\internship\mlmodel\carbonledger-document-ai"
-if os.path.exists(DOC_AI_MODEL_DIR) and DOC_AI_MODEL_DIR not in sys.path:
-    sys.path.insert(0, DOC_AI_MODEL_DIR)
+# Ensure project root is accessible in sys.path
+PROJECT_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+if PROJECT_ROOT not in sys.path:
+    sys.path.insert(0, PROJECT_ROOT)
 
 try:
     import pdfplumber
-    import run_extraction as doc_ai_pipeline
+    import pipeline.doc_ai_pipeline as doc_ai_pipeline
     from pipeline.pdf_parser import PDFParser
     from pipeline.ocr_engine import TesseractOCR
     from pipeline.classifier import RuleBasedDocumentClassifier
@@ -35,13 +35,10 @@ except Exception as import_err:
 
 class DocumentAIService:
     """
-    Direct Python programmatic integration service for CarbonLedger Document AI
-    located at D:\\internship\\mlmodel\\carbonledger-document-ai.
+    Direct Python programmatic integration service for CarbonLedger Document AI.
     """
     def __init__(self, model_dir: Optional[str] = None):
-        self.model_dir = model_dir or DOC_AI_MODEL_DIR
-        if os.path.exists(self.model_dir) and self.model_dir not in sys.path:
-            sys.path.insert(0, self.model_dir)
+        self.model_dir = model_dir or PROJECT_ROOT
 
     @staticmethod
     def get_file_hash(filepath: str) -> str:
@@ -457,9 +454,24 @@ class DocumentAIService:
             }
 
             # Top-level convenience aliases
-            rec["material"] = rec["activity"].get("material") or rec["activity"].get("product")
-            rec["quantity"] = rec["activity"].get("quantity") if rec["activity"].get("quantity") is not None else rec["activity"].get("consumption")
-            rec["unit"] = rec["activity"].get("unit") or rec["activity"].get("consumption_unit")
+            raw_mat = rec["activity"].get("material") or rec["activity"].get("product")
+            if not raw_mat:
+                if rec["activity"].get("fuel_type"):
+                    raw_mat = f"Fuel: {rec['activity']['fuel_type']}"
+                elif rec["activity"].get("energy_type"):
+                    raw_mat = f"Energy: {str(rec['activity']['energy_type']).title()}"
+                elif rec["activity"].get("transport_mode"):
+                    raw_mat = f"Freight ({rec['activity']['transport_mode']})"
+                elif rec["activity"].get("activity_type") in ["ELECTRICITY_CONSUMPTION", "ELECTRICITY_GRID"]:
+                    raw_mat = "Electricity Grid"
+                elif rec["activity"].get("activity_type") in ["NATURAL_GAS_CONSUMPTION"]:
+                    raw_mat = "Natural Gas"
+                elif rec["activity"].get("activity_type") in ["STEAM_CONSUMPTION"]:
+                    raw_mat = "Steam Utility"
+
+            rec["material"] = raw_mat
+            rec["quantity"] = rec["activity"].get("quantity") if rec["activity"].get("quantity") is not None else (rec["activity"].get("consumption") if rec["activity"].get("consumption") is not None else rec["activity"].get("weight"))
+            rec["unit"] = rec["activity"].get("unit") or rec["activity"].get("consumption_unit") or rec["activity"].get("weight_unit")
             rec["weight"] = rec["activity"].get("weight")
             rec["weight_unit"] = rec["activity"].get("weight_unit")
             rec["distance"] = rec["activity"].get("distance")

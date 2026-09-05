@@ -1,0 +1,8 @@
+{
+  "PURCHASE_INVOICE": ["supplier", "invoice_number", "invoice_date", "quantity", "unit"],
+  "ELECTRICITY_BILL": ["supplier", "account_number", "quantity", "unit"],
+  "FUEL_INVOICE": ["supplier", "fuel_type", "quantity", "unit"],
+  "TRANSPORTATION_INVOICE": ["supplier", "route", "distance", "quantity", "unit"],
+  "SHIPPING_MANIFEST": ["supplier", "origin", "destination", "quantity", "unit"],
+  "BILL_OF_LADING": ["supplier", "origin", "destination", "quantity", "unit"]
+}

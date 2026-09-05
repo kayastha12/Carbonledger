@@ -1,0 +1,18 @@
+{
+  "India": ["india", "in", "ind"],
+  "China": ["china", "cn", "chn"],
+  "Germany": ["germany", "de", "deu"],
+  "Japan": ["japan", "jp", "jpn"],
+  "South Korea": ["south korea", "korea", "kr", "kor"],
+  "USA": ["usa", "united states", "us", "united states of america"],
+  "UK": ["uk", "united kingdom", "gb", "gbr"],
+  "France": ["france", "fr", "fra"],
+  "Italy": ["italy", "it", "ita"],
+  "Vietnam": ["vietnam", "vn", "vnm"],
+  "Thailand": ["thailand", "th", "tha"],
+  "Canada": ["canada", "ca", "can"],
+  "Turkey": ["turkey", "tr", "tur"],
+  "UAE": ["uae", "united arab emirates", "ae", "are"],
+  "Australia": ["australia", "au", "aus"],
+  "Brazil": ["brazil", "br", "bra"]
+}

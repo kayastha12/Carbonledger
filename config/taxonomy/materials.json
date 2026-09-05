@@ -1,0 +1,13 @@
+{
+  "Steel": ["hot rolled steel", "steel coil", "steel sheet", "steel plate", "steel rebar", "stainless steel", "steel wire rod", "steel billet"],
+  "Aluminium": ["aluminium billet", "aluminium sheet", "aluminium foil", "aluminium extrusion profile", "aluminium ingot"],
+  "Copper": ["copper wire", "copper cathode", "copper tube", "copper busbar"],
+  "Cement": ["ordinary portland cement", "cement clinker", "white cement", "sulfate resistant cement"],
+  "Concrete": ["ready mix concrete", "concrete block"],
+  "Plastic": ["pvc resin", "hdpe granules", "polypropylene pellets", "pet preform", "injection molded component"],
+  "Glass": ["glass sheet", "tempered glass"],
+  "Paper": ["kraft paper roll", "corrugated fluting paper", "newsprint roll", "coated paperboard", "paper pulp"],
+  "Wood": ["timber", "lumber", "plywood"],
+  "Rubber": ["industrial rubber", "tire rubber"],
+  "Chemical": ["sodium hydroxide", "sulfuric acid", "industrial lubricant", "polyurethane resin", "ammonium nitrate"]
+}

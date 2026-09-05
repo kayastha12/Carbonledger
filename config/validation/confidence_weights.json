@@ -1,0 +1,14 @@
+{
+  "weights": {
+    "extraction": 0.30,
+    "normalization": 0.15,
+    "unit": 0.20,
+    "consistency": 0.15,
+    "validation": 0.15,
+    "source": 0.05
+  },
+  "thresholds": {
+    "high": 0.85,
+    "medium": 0.65
+  }
+}

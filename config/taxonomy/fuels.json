@@ -1,0 +1,9 @@
+{
+  "Diesel": ["diesel", "diesel oil", "diesel fuel", "gas oil", "hsd", "high speed diesel"],
+  "Petrol": ["petrol", "gasoline", "motor spirit"],
+  "Natural Gas": ["natural gas", "lng", "liquefied natural gas"],
+  "LPG": ["lpg", "liquefied petroleum gas", "propane", "butane"],
+  "CNG": ["cng", "compressed natural gas"],
+  "Coal": ["coal", "coking coal", "thermal coal", "anthracite", "lignite"],
+  "Biodiesel": ["biodiesel", "bio-diesel"]
+}

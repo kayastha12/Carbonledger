@@ -1,0 +1,7 @@
+{
+  "INR": ["inr", "rs", "rupee", "rupees", "₹"],
+  "USD": ["usd", "dollar", "dollars", "$"],
+  "EUR": ["eur", "euro", "euros", "€"],
+  "CNY": ["cny", "rmb", "yuan", "¥"],
+  "JPY": ["jpy", "yen", "¥"]
+}

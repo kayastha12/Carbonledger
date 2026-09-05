@@ -1,0 +1,8 @@
+{
+  "tonne": ["mt", "ton", "tonne", "tonnes", "metric ton", "metric tons"],
+  "kg": ["kg", "kgs", "kilogram", "kilograms", "kilo", "kilos"],
+  "kWh": ["kwh", "kw-h", "kilowatt hour", "kilowatt-hours", "kilowatthours"],
+  "liter": ["l", "liter", "liters", "litre", "litres", "ltr", "ltrs"],
+  "km": ["km", "kms", "kilometer", "kilometre", "kilometers", "kilometres"],
+  "mWh": ["mwh", "megawatt hour", "megawatt-hours"]
+}

@@ -1,0 +1,5 @@
+{
+  "minimum_extraction_f1": 0.90,
+  "minimum_unit_accuracy": 0.95,
+  "maximum_critical_error_rate": 0.02
+}

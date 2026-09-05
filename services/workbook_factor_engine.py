@@ -78,11 +78,12 @@ class WorkbookFactorEngine:
         cls._instance = None
 
     def _resolve_workbook_path(self) -> str:
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         candidates = [
+            os.path.join(project_root, "datasets", "CarbonLedger_GHG_Factors_2026_Clean(6).xlsx"),
+            os.path.join(project_root, "datasets", "CarbonLedger_GHG_Factors_2026_Clean.xlsx"),
             r"D:\internship\mlmodel\CarbonLedger_GHG_Factors_2026_Clean(6).xlsx",
             r"D:\internship\CarbonLedger_GHG_Factors_2026_Clean(6).xlsx",
-            os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "datasets", "CarbonLedger_GHG_Factors_2026_Clean.xlsx"),
-            r"D:\internship\Carbonledger\datasets\CarbonLedger_GHG_Factors_2026_Clean.xlsx",
         ]
         for p in candidates:
             if os.path.exists(p):

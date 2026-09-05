@@ -1,0 +1,8 @@
+{
+  "Road": ["road", "truck", "lorry", "trailer", "road freight", "vehicle transport"],
+  "Rail": ["rail", "train", "railway", "rail freight"],
+  "Air": ["air", "aircraft", "air cargo", "flight", "air freight"],
+  "Sea": ["sea", "cargo ship", "container vessel", "ocean freight", "vessel", "container ship"],
+  "Inland Waterway": ["inland waterway", "barge", "river transport"],
+  "Unknown": ["unknown", "other transport", "port / yard", "port/yard", "all modes"]
+}

@@ -1,0 +1,18 @@
+{
+  "PURCHASE_INVOICE": {
+    "quantity": ["kg", "tonne"]
+  },
+  "ELECTRICITY_BILL": {
+    "quantity": ["kWh", "MWh"]
+  },
+  "FUEL_INVOICE": {
+    "quantity": ["liter", "kg"]
+  },
+  "TRANSPORTATION_INVOICE": {
+    "quantity": ["kg", "tonne"],
+    "distance": ["km", "mile"]
+  },
+  "SHIPPING_MANIFEST": {
+    "quantity": ["kg", "tonne"]
+  }
+}

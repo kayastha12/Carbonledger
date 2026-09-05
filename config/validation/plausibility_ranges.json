@@ -1,0 +1,14 @@
+{
+  "distance": {
+    "minimum": 0,
+    "maximum": 50000
+  },
+  "quantity": {
+    "minimum": 0,
+    "maximum": 1000000
+  },
+  "electricity": {
+    "minimum": 0,
+    "maximum": 100000000
+  }
+}
