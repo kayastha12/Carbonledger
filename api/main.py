@@ -42,7 +42,7 @@ from services.predictive_analytics import PredictiveAnalyticsService
 from services.universal_upload_service import UniversalUploadService
 
 # SQLite DB Connection
-from api.database import get_db_connection
+from api.database import get_db_connection, init_db
 
 # Phase 8 – CBAM Report Service
 from services import cbam_report_service
@@ -52,7 +52,14 @@ app = FastAPI(title="CarbonLedger Enterprise Sustainability OS API", version="7.
 # Enable CORS for frontend integration
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=[
+        "http://localhost:3000",
+        "http://127.0.0.1:3000",
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+        "https://carbonledger-app-vxb3.onrender.com",
+    ],
+    allow_origin_regex=r"https://.*\.onrender\.com",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -74,6 +81,11 @@ rag_service = RAGService()
 
 @app.on_event("startup")
 async def startup_event():
+    try:
+        init_db()
+        print("[Startup] Database tables initialized and verified successfully.")
+    except Exception as e:
+        print(f"[Startup] Error initializing database: {e}")
     print(f"[Startup] Centralized EmissionFactorService initialized. Loaded {factor_service.metrics['total_factors_loaded']} factors.")
 
 @app.get("/api/v1/emission-factors/metrics")

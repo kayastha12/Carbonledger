@@ -15,6 +15,15 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
   const [successMsg, setSuccessMsg] = useState('');
   const [isLoading, setIsLoading] = useState(false);
 
+  const formatErrorMessage = (err) => {
+    if (!err) return 'An unexpected error occurred.';
+    const msg = err.message || String(err);
+    if (msg.includes('Failed to fetch') || msg.includes('NetworkError') || msg.includes('Load failed')) {
+      return 'Unable to connect to CarbonLedger server. Please verify the API is running or try again shortly.';
+    }
+    return msg;
+  };
+
   const handleLogin = (e) => {
     if (e) e.preventDefault();
     setIsLoading(true);
@@ -26,9 +35,20 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), password })
     })
-    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(async res => {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch (jsonErr) {
+        body = { detail: res.statusText || 'Server communication error' };
+      }
+      return { status: res.status, body };
+    })
     .then(({ status, body }) => {
       setIsLoading(false);
+      if (status === 401) throw new Error('Invalid email or password.');
+      if (status === 403) throw new Error(body.detail || 'Your account is suspended. Please contact administrator.');
+      if (status >= 500) throw new Error('Authentication service is temporarily unavailable. Please try again.');
       if (status !== 200) throw new Error(body.detail || 'Login failed. Please check your credentials.');
       localStorage.setItem('carbonledger_token', body.token);
       localStorage.setItem('carbonledger_user', JSON.stringify(body.user));
@@ -37,7 +57,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     })
     .catch(err => {
       setIsLoading(false);
-      setErrorMsg(err.message);
+      setErrorMsg(formatErrorMessage(err));
     });
   };
 
@@ -59,9 +79,18 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
         role: 'subscriber'
       })
     })
-    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(async res => {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch (jsonErr) {
+        body = { detail: res.statusText || 'Server communication error' };
+      }
+      return { status: res.status, body };
+    })
     .then(({ status, body }) => {
       setIsLoading(false);
+      if (status >= 500) throw new Error('Registration service is temporarily unavailable. Please try again.');
       if (status !== 200) throw new Error(body.detail || 'Registration failed.');
       localStorage.setItem('carbonledger_token', body.token);
       localStorage.setItem('carbonledger_user', JSON.stringify(body.user));
@@ -70,7 +99,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     })
     .catch(err => {
       setIsLoading(false);
-      setErrorMsg(err.message);
+      setErrorMsg(formatErrorMessage(err));
     });
   };
 
@@ -85,9 +114,18 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim() })
     })
-    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(async res => {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch (jsonErr) {
+        body = { detail: res.statusText || 'Server communication error' };
+      }
+      return { status: res.status, body };
+    })
     .then(({ status, body }) => {
       setIsLoading(false);
+      if (status >= 500) throw new Error('Password reset service is temporarily unavailable.');
       if (status !== 200) throw new Error(body.detail || 'Unable to process request.');
       setSuccessMsg(`Reset code generated: ${body.reset_code || 'Sent to email'}. Please enter below.`);
       if (body.reset_code) setResetToken(body.reset_code);
@@ -95,7 +133,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     })
     .catch(err => {
       setIsLoading(false);
-      setErrorMsg(err.message);
+      setErrorMsg(formatErrorMessage(err));
     });
   };
 
@@ -114,9 +152,18 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
         new_password: newPassword
       })
     })
-    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(async res => {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch (jsonErr) {
+        body = { detail: res.statusText || 'Server communication error' };
+      }
+      return { status: res.status, body };
+    })
     .then(({ status, body }) => {
       setIsLoading(false);
+      if (status >= 500) throw new Error('Password reset service is temporarily unavailable.');
       if (status !== 200) throw new Error(body.detail || 'Password reset failed.');
       setSuccessMsg('Password updated successfully! Please sign in with your new password.');
       setAuthMode('login');
@@ -124,7 +171,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     })
     .catch(err => {
       setIsLoading(false);
-      setErrorMsg(err.message);
+      setErrorMsg(formatErrorMessage(err));
     });
   };
 
@@ -140,9 +187,19 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: demoEmail, password: demoPw })
     })
-    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(async res => {
+      let body = {};
+      try {
+        body = await res.json();
+      } catch (jsonErr) {
+        body = { detail: res.statusText || 'Server communication error' };
+      }
+      return { status: res.status, body };
+    })
     .then(({ status, body }) => {
       setIsLoading(false);
+      if (status === 401) throw new Error('Invalid demo credentials.');
+      if (status >= 500) throw new Error('Authentication service is temporarily unavailable.');
       if (status !== 200) throw new Error(body.detail || 'Login failed.');
       localStorage.setItem('carbonledger_token', body.token);
       localStorage.setItem('carbonledger_user', JSON.stringify(body.user));
@@ -151,7 +208,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     })
     .catch(err => {
       setIsLoading(false);
-      setErrorMsg(err.message);
+      setErrorMsg(formatErrorMessage(err));
     });
   };
 
