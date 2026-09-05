@@ -79,7 +79,29 @@ app.add_middleware(
 @app.get("/")
 @app.get("/health")
 def health_check():
-    return {"status": "healthy", "service": "CarbonLedger Enterprise Sustainability OS API", "version": "7.0"}
+    return {"status": "healthy", "service": "CarbonLedger Enterprise Sustainability OS API", "version": "7.1"}
+
+@app.get("/api/debug/doc-ai")
+def debug_doc_ai():
+    try:
+        from services.document_ai_service import DocumentAIService, DOCUMENT_AI_AVAILABLE
+        ai_service = DocumentAIService()
+        return {
+            "document_ai_available": DOCUMENT_AI_AVAILABLE,
+            "pipeline_ready": ai_service.is_ready(),
+            "python_executable": sys.executable,
+            "project_root": project_root,
+            "datasets_exist": os.path.exists(os.path.join(project_root, "datasets")),
+            "pipeline_exist": os.path.exists(os.path.join(project_root, "pipeline")),
+            "schemas_exist": os.path.exists(os.path.join(project_root, "schemas")),
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
+
 
 # Services Instantiation
 factor_service = EmissionFactorService.get_instance()
