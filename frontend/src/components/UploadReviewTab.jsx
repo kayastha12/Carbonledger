@@ -279,24 +279,53 @@ export default function UploadReviewTab({
         )}
       </div>
 
-      {/* LOADING STATE */}
+      {/* REAL-TIME MULTI-STEP PIPELINE PROGRESS STATE */}
       {universalStatus === 'uploading' && (
         <div style={{
-          padding: '40px', borderRadius: '18px', backgroundColor: themeCard, border: `1px solid ${themeBorder}`,
-          textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '14px'
+          padding: '36px 32px', borderRadius: '18px', backgroundColor: themeCard, border: `1px solid ${themeBorder}`,
+          display: 'flex', flexDirection: 'column', gap: '24px', boxShadow: '0 8px 24px rgba(0,0,0,0.15)'
         }}>
-          <div style={{
-            width: '44px', height: '44px', borderRadius: '50%',
-            border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981',
-            animation: 'spin 1s linear infinite'
-          }} />
-          <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
-          <h4 style={{ margin: 0, color: themeText, fontSize: '16px', fontWeight: '700' }}>
-            Extracting carbon-relevant data from {universalFile?.name || 'document'}...
-          </h4>
-          <p style={{ margin: 0, fontSize: '12px', color: themeSubtext }}>
-            Analyzing tables, reconstructing multi-line tokens, validating real source fields & scoping activity factors.
-          </p>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: '16px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '16px' }}>
+              <div style={{
+                width: '42px', height: '42px', borderRadius: '50%',
+                border: '3px solid rgba(16,185,129,0.2)', borderTopColor: '#10b981',
+                animation: 'spin 1s linear infinite'
+              }} />
+              <style>{`@keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }`}</style>
+              <div>
+                <h4 style={{ margin: '0 0 4px 0', color: themeText, fontSize: '16px', fontWeight: '800' }}>
+                  Processing {universalFile?.name || 'Document'} in Real-Time
+                </h4>
+                <p style={{ margin: 0, fontSize: '12px', color: themeSubtext }}>
+                  Document AI is executing extraction heuristics and authoritative GHG matching.
+                </p>
+              </div>
+            </div>
+            <span style={{ fontSize: '12px', padding: '6px 14px', borderRadius: '20px', backgroundColor: 'rgba(16,185,129,0.1)', color: '#10b981', fontWeight: '700' }}>
+              Live AI Pipeline Active
+            </span>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '12px', marginTop: '10px' }}>
+            {[
+              { step: '1. Receive & Parse', desc: 'Reading PDF tokens & tables', icon: '📑' },
+              { step: '2. Classify & Segment', desc: 'Invoices, Fuels, Freight, Utilities', icon: '🔍' },
+              { step: '3. Extract & Normalize', desc: 'Physical quantities & units', icon: '⚡' },
+              { step: '4. Validate & Match', desc: 'GHG Protocol & CBAM factors', icon: '🌿' }
+            ].map((st, i) => (
+              <div key={i} style={{
+                padding: '16px', borderRadius: '12px', backgroundColor: isDarkMode ? '#0d131f' : '#f8fafc',
+                border: `1px solid ${themeBorder}`, display: 'flex', gap: '10px', alignItems: 'center'
+              }}>
+                <span style={{ fontSize: '20px' }}>{st.icon}</span>
+                <div>
+                  <div style={{ fontSize: '13px', fontWeight: '700', color: themeText }}>{st.step}</div>
+                  <div style={{ fontSize: '11px', color: themeSubtext }}>{st.desc}</div>
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
       )}
 
