@@ -44,6 +44,13 @@ from services.universal_upload_service import UniversalUploadService
 # SQLite DB Connection
 from api.database import get_db_connection, init_db
 
+# Initialize database tables immediately on module load
+try:
+    init_db()
+    print("[DB] Initialized database tables on module load.")
+except Exception as e:
+    print(f"[DB] Module load init exception: {e}")
+
 # Phase 8 – CBAM Report Service
 from services import cbam_report_service
 
