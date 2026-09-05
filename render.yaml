@@ -15,12 +15,12 @@ services:
   # ----------------------------------------------------
   # 2. React / Vite Frontend Static Web App
   # ----------------------------------------------------
-  - type: static
+  - type: web
     name: carbonledger-app
     runtime: static
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: dist
+    staticPublishPath: ./dist
     routes:
       - type: rewrite
         source: /*
