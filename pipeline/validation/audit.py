@@ -1,7 +1,7 @@
 import json
 import os
 import time
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 
 class ValidationAuditor:
     def __init__(self, log_path: str = None):
