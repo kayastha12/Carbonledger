@@ -16,22 +16,18 @@ services:
       - key: WEB_CONCURRENCY
         value: "1"
 
-  # ----------------------------------------------------
-  # 2. React / Vite Frontend Static Web App
-  # ----------------------------------------------------
-  - type: web
-    name: carbonledger-app
-    runtime: static
+# ----------------------------------------------------
+# 2. React / Vite Frontend Static Site
+# ----------------------------------------------------
+staticSites:
+  - name: carbonledger-app
     rootDir: frontend
     buildCommand: npm install && npm run build
-    staticPublishPath: ./dist
+    publishPath: dist
     routes:
       - type: rewrite
         source: /*
         destination: /index.html
     envVars:
       - key: VITE_API_BASE_URL
-        fromService:
-          type: web
-          name: carbonledger-api
-          property: host
+        value: https://carbonledger-api-8bl2.onrender.com
