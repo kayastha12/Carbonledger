@@ -13,3 +13,8 @@ requests
 psutil
 numpy
 timm
+python-multipart
+fpdf2
+pyjwt
+pypdf
+pdfplumber

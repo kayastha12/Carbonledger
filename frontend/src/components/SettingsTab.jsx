@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE } from '../config';
 
 export default function SettingsTab({
   currentUser,
@@ -12,7 +13,7 @@ export default function SettingsTab({
   themeSubtext
 }) {
   const handleSaveProfile = () => {
-    fetch('http://localhost:8000/api/v1/user/profile', {
+    fetch(`${API_BASE}/api/v1/user/profile`, {
       method: 'PUT',
       headers: getAuthHeaders(),
       body: JSON.stringify({

@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE } from '../config';
 
 export default function ReportsTab({
   universalResult,
@@ -75,10 +76,10 @@ export default function ReportsTab({
 
     setDownloadingKey(rep.key);
     try {
-      // Direct request to backend port 8000
+      // Direct request to backend
       const targetUrl = reportUrl.startsWith('http') 
         ? reportUrl 
-        : `http://localhost:8000${reportUrl.startsWith('/') ? '' : '/'}${reportUrl}`;
+        : `${API_BASE}${reportUrl.startsWith('/') ? '' : '/'}${reportUrl}`;
 
       const headers = getAuthHeaders ? getAuthHeaders() : {};
       const response = await fetch(targetUrl, {

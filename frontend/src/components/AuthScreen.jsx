@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { API_BASE } from '../config';
 
 export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, themeSubtext, themeBorder, themeCard }) {
   const [authMode, setAuthMode] = useState('login'); // 'login', 'signup', 'forgot', 'reset'
@@ -20,7 +21,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     setErrorMsg('');
     setSuccessMsg('');
 
-    fetch('http://localhost:8000/api/v1/auth/login', {
+    fetch(`${API_BASE}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim(), password })
@@ -46,7 +47,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     setErrorMsg('');
     setSuccessMsg('');
 
-    fetch('http://localhost:8000/api/v1/auth/register', {
+    fetch(`${API_BASE}/api/v1/auth/register`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -79,7 +80,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     setErrorMsg('');
     setSuccessMsg('');
 
-    fetch('http://localhost:8000/api/v1/auth/forgot-password', {
+    fetch(`${API_BASE}/api/v1/auth/forgot-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: email.trim() })
@@ -104,7 +105,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     setErrorMsg('');
     setSuccessMsg('');
 
-    fetch('http://localhost:8000/api/v1/auth/reset-password', {
+    fetch(`${API_BASE}/api/v1/auth/reset-password`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({
@@ -134,7 +135,7 @@ export default function AuthScreen({ onLoginSuccess, isDarkMode, themeText, them
     setErrorMsg('');
     setSuccessMsg('');
 
-    fetch('http://localhost:8000/api/v1/auth/login', {
+    fetch(`${API_BASE}/api/v1/auth/login`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ email: demoEmail, password: demoPw })

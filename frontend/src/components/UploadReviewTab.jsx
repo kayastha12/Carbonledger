@@ -1,4 +1,5 @@
 import React, { useRef, useState } from 'react';
+import { API_BASE } from '../config';
 
 export default function UploadReviewTab({
   currentUser,
@@ -73,7 +74,7 @@ export default function UploadReviewTab({
     const formData = new FormData();
     formData.append('file', universalFile);
 
-    fetch('http://localhost:8000/api/upload/universal', {
+    fetch(`${API_BASE}/api/upload/universal`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${localStorage.getItem('carbonledger_token')}` },
       body: formData
@@ -130,7 +131,7 @@ export default function UploadReviewTab({
       return;
     }
 
-    fetch('http://localhost:8000/api/upload/approve', {
+    fetch(`${API_BASE}/api/upload/approve`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ upload_id: universalUploadId, records: reviewedRecords })

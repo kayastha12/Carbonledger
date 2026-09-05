@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from 'react';
+import { API_BASE } from './src/config';
 import AuthScreen from './src/components/AuthScreen';
 import TopHeader from './src/components/TopHeader';
 import Sidebar from './src/components/Sidebar';
@@ -114,7 +115,7 @@ export default function DashboardApp() {
   const refreshUserData = () => {
     const token = localStorage.getItem('carbonledger_token');
     if (!token) return;
-    fetch('http://localhost:8000/api/v1/auth/me', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/auth/me`, { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data.user) {
@@ -133,7 +134,7 @@ export default function DashboardApp() {
   const fetchUserUploadData = () => {
     const token = localStorage.getItem('carbonledger_token');
     if (!token) return;
-    fetch('http://localhost:8000/api/upload/latest', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/upload/latest`, { headers: getAuthHeaders() })
       .then(res => res.json())
       .then(data => {
         if (data && data.records && data.records.length > 0) {
@@ -149,26 +150,26 @@ export default function DashboardApp() {
 
   // Fetch Billing and Activity History
   const fetchBillingAndActivity = () => {
-    fetch('http://localhost:8000/api/v1/user/billing/history', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/user/billing/history`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setBillingHistory(data || [])).catch(() => {});
-    fetch('http://localhost:8000/api/v1/user/tokens/history', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/user/tokens/history`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setTokenHistory(data || [])).catch(() => {});
-    fetch('http://localhost:8000/api/v1/user/activity', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/user/activity`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setUserActivities(data || [])).catch(() => {});
   };
 
   // Fetch Admin Console Data
   const fetchAdminData = () => {
     if (currentUser?.role !== 'admin') return;
-    fetch('http://localhost:8000/api/v1/admin/dashboard-stats', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/admin/dashboard-stats`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setAdminStats(data || null)).catch(() => {});
-    fetch('http://localhost:8000/api/v1/admin/users', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/admin/users`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setAdminUsersList(data || [])).catch(() => {});
-    fetch('http://localhost:8000/api/v1/admin/rules', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/admin/rules`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setAdminRules(data || [])).catch(() => {});
-    fetch('http://localhost:8000/api/v1/admin/factors', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/admin/factors`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setAdminFactors(data || [])).catch(() => {});
-    fetch('http://localhost:8000/api/v1/admin/audit-logs', { headers: getAuthHeaders() })
+    fetch(`${API_BASE}/api/v1/admin/audit-logs`, { headers: getAuthHeaders() })
       .then(res => res.json()).then(data => setAdminAuditLogs(data || [])).catch(() => {});
   };
 
@@ -199,7 +200,7 @@ export default function DashboardApp() {
   };
 
   const handleUpgradePlan = (planKey, cycle) => {
-    fetch('http://localhost:8000/api/v1/user/subscription/upgrade', {
+    fetch(`${API_BASE}/api/v1/user/subscription/upgrade`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ plan_tier: planKey, billing_cycle: cycle, payment_method: 'Visa ending in 4242' })
@@ -217,7 +218,7 @@ export default function DashboardApp() {
 
   const handleAdminAdjustTokens = () => {
     if (!selectedAdminUser) return;
-    fetch(`http://localhost:8000/api/v1/admin/users/${selectedAdminUser.id}/tokens`, {
+    fetch(`${API_BASE}/api/v1/admin/users/${selectedAdminUser.id}/tokens`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
@@ -238,7 +239,7 @@ export default function DashboardApp() {
 
   const handleAdminOverrideSub = () => {
     if (!selectedAdminUser) return;
-    fetch(`http://localhost:8000/api/v1/admin/users/${selectedAdminUser.id}/subscription`, {
+    fetch(`${API_BASE}/api/v1/admin/users/${selectedAdminUser.id}/subscription`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({
@@ -259,7 +260,7 @@ export default function DashboardApp() {
   };
 
   const handleAdminToggleUser = (userId) => {
-    fetch(`http://localhost:8000/api/v1/admin/users/${userId}/status`, {
+    fetch(`${API_BASE}/api/v1/admin/users/${userId}/status`, {
       method: 'PATCH',
       headers: getAuthHeaders()
     }).then(() => {
@@ -270,7 +271,7 @@ export default function DashboardApp() {
 
   const handleAdminDeleteUser = (userId) => {
     if (!window.confirm('Are you sure you want to delete this user and all associated tenant records?')) return;
-    fetch(`http://localhost:8000/api/v1/admin/users/${userId}`, {
+    fetch(`${API_BASE}/api/v1/admin/users/${userId}`, {
       method: 'DELETE',
       headers: getAuthHeaders()
     })

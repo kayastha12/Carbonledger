@@ -1,4 +1,5 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { API_BASE } from '../config';
 
 export default function AdminConsoleTab({
   adminSubTab,
@@ -186,7 +187,7 @@ export default function AdminConsoleTab({
                   <td style={{ padding: '8px' }}>
                     <button 
                       onClick={() => {
-                        fetch(`http://localhost:8000/api/v1/admin/rules/${r.id}`, { method: 'DELETE', headers: getAuthHeaders() })
+                        fetch(`${API_BASE}/api/v1/admin/rules/${r.id}`, { method: 'DELETE', headers: getAuthHeaders() })
                           .then(() => { showToast('Rule removed'); fetchAdminData(); });
                       }}
                       style={{ padding: '3px 8px', borderRadius: '4px', border: '1px solid #ef4444', background: 'rgba(239,68,68,0.1)', color: '#f87171', cursor: 'pointer', fontSize: '10px' }}>

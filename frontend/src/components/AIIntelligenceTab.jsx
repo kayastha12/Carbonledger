@@ -1,4 +1,5 @@
 import React from 'react';
+import { API_BASE } from '../config';
 
 export default function AIIntelligenceTab({
   currentUser,
@@ -37,7 +38,7 @@ export default function AIIntelligenceTab({
     setChatInput('');
     setIsChatLoading(true);
 
-    fetch('http://localhost:8000/api/rag', {
+    fetch(`${API_BASE}/api/rag`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ query: q, tenant_id: currentUser?.organization || 'enterprise' })
@@ -62,7 +63,7 @@ export default function AIIntelligenceTab({
       return;
     }
     setIsScenarioLoading(true);
-    fetch('http://localhost:8000/api/what-if', {
+    fetch(`${API_BASE}/api/what-if`, {
       method: 'POST',
       headers: getAuthHeaders(),
       body: JSON.stringify({ strategy: selectedStrategy })
