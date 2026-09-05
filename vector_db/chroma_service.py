@@ -1,8 +1,6 @@
 import os
 import json
 from typing import Optional, List, Dict, Any
-import chromadb
-from sentence_transformers import SentenceTransformer
 
 class ChromaService:
     """
@@ -13,20 +11,30 @@ class ChromaService:
         project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
         self.persist_dir = persist_dir or os.path.join(project_root, "vector_db", "chroma_data")
         os.makedirs(self.persist_dir, exist_ok=True)
-        self.client = chromadb.PersistentClient(path=self.persist_dir)
-        
-        # Load BAAI/bge-small-en-v1.5 from local cache or auto-download
         self.pretrained_cache_bge = os.path.join(project_root, "models", "pretrained", "bge-small-en-v1.5")
-        os.makedirs(self.pretrained_cache_bge, exist_ok=True)
-        try:
-            print("Loading embedding model BAAI/bge-small-en-v1.5...")
-            self.model = SentenceTransformer("BAAI/bge-small-en-v1.5", cache_folder=self.pretrained_cache_bge)
-        except Exception as e:
-            print(f"Warning: BAAI/bge-small-en-v1.5 load failed ({e}), trying default fallback.")
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
-            
+        self.client = None
+        self.model = None
+        self.collection = None
         self.collection_name = "emission_factors"
-        self.collection = self.client.get_or_create_collection(self.collection_name)
+
+    def _get_client(self):
+        if self.client is None:
+            try:
+                import chromadb
+                self.client = chromadb.PersistentClient(path=self.persist_dir)
+                self.collection = self.client.get_or_create_collection(self.collection_name)
+            except Exception as e:
+                print(f"Chroma client note: {e}")
+        return self.client
+
+    def _get_model(self):
+        if self.model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception as e:
+                print(f"Chroma embedding model note: {e}")
+        return self.model
 
     def index_factors(self, factors_json_path: str, refresh_embeddings: bool = False):
         print(f"Indexing emission factors from: {factors_json_path}")
@@ -93,7 +101,12 @@ class ChromaService:
         print(f"Indexed records (Collection count: {self.collection.count()})")
 
     def query_factors(self, query_text: str, top_n: int = 5) -> List[Dict[str, Any]]:
-        query_embedding = self.model.encode([query_text]).tolist()
+        self._get_client()
+        embed_model = self._get_model()
+        if not self.collection or not embed_model:
+            return []
+            
+        query_embedding = embed_model.encode([query_text]).tolist()
         results = self.collection.query(
             query_embeddings=query_embedding,
             n_results=top_n

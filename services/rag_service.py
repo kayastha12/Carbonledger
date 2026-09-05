@@ -1,49 +1,37 @@
 import os
-import torch
-import chromadb
-from sentence_transformers import SentenceTransformer
+import json
 
 class RAGService:
-    def __init__(self, persist_dir="d:/internship/carbonledger/vector_db/chroma_data"):
-        self.persist_dir = persist_dir
-        self.client = chromadb.PersistentClient(path=self.persist_dir)
+    def __init__(self, persist_dir="vector_db/chroma_data"):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.persist_dir = os.path.join(project_root, persist_dir) if not os.path.isabs(persist_dir) else persist_dir
+        os.makedirs(self.persist_dir, exist_ok=True)
         
-        # Load BAAI/bge-small-en-v1.5 from local cache or auto-download
-        self.pretrained_cache_bge = "d:/internship/carbonledger/models/pretrained/bge-small-en-v1.5"
-        os.makedirs(self.pretrained_cache_bge, exist_ok=True)
-        try:
-            print("Loading RAG embedding model BAAI/bge-small-en-v1.5...")
-            self.model = SentenceTransformer("BAAI/bge-small-en-v1.5", cache_folder=self.pretrained_cache_bge)
-        except Exception as e:
-            print(f"Warning: BAAI/bge-small-en-v1.5 load failed ({e}), trying default fallback.")
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
-            
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        self.generator_model_id = "Qwen/Qwen2.5-0.5B-Instruct"
-        self.generator_cache_dir = "d:/internship/carbonledger/models/pretrained/qwen2.5-0.5b-instruct"
+        self.client = None
+        self.collection = None
+        self.model = None
         self.generator_pipeline = None
-        
-        try:
-            print(f"Loading RAG Generator model {self.generator_model_id} on {self.device}...")
-            from transformers import pipeline, AutoTokenizer, AutoModelForCausalLM
-            os.makedirs(self.generator_cache_dir, exist_ok=True)
-            tok = AutoTokenizer.from_pretrained(self.generator_model_id, cache_dir=self.generator_cache_dir)
-            mod = AutoModelForCausalLM.from_pretrained(self.generator_model_id, cache_dir=self.generator_cache_dir)
-            mod.to(self.device)
-            self.generator_pipeline = pipeline("text-generation", model=mod, tokenizer=tok, device=0 if torch.cuda.is_available() else -1)
-        except Exception as e:
-            print(f"Warning: RAG Generator load failed ({e}). Fallback logic will be used.")
-            
         self.collection_name = "policy_rag"
-        self.collection = self.client.get_or_create_collection(self.collection_name)
-        
-        # Conversation memory store: tenant_id -> list of messages
         self.memory = {}
-        
-        # Auto-index parsed SRS text
-        srs_txt_path = r"C:\Users\Aniket Singh\.gemini\antigravity-ide\brain\4abf928f-758c-4ca6-bae5-18a9b562f561\scratch\srs_text.txt"
-        if os.path.exists(srs_txt_path) and self.collection.count() == 0:
-            self._index_srs_text(srs_txt_path)
+
+    def _get_client(self):
+        if self.client is None:
+            try:
+                import chromadb
+                self.client = chromadb.PersistentClient(path=self.persist_dir)
+                self.collection = self.client.get_or_create_collection(self.collection_name)
+            except Exception as e:
+                print(f"ChromaDB initialization note: {e}")
+        return self.client
+
+    def _get_embedding_model(self):
+        if self.model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception as e:
+                print(f"Embedding model note: {e}")
+        return self.model
 
     def _index_srs_text(self, filepath):
         print(f"Indexing policy documents for RAG from: {filepath}")
@@ -88,38 +76,38 @@ class RAGService:
         
         history = self.memory[tenant_id]
         
-        query_embedding = self.model.encode([query_text]).tolist()
-        
-        # Enforce $or prefix for ChromaDB
-        tenant_filter = {
-            "$or": [
-                {"tenant_id": "public"},
-                {"tenant_id": tenant_id}
-            ]
-        }
-        
-        results = self.collection.query(
-            query_embeddings=query_embedding,
-            n_results=10,
-            where=tenant_filter
-        )
-        
         candidates = []
-        if results and results["documents"] and len(results["documents"]) > 0:
-            for idx in range(len(results["documents"][0])):
-                doc = results["documents"][0][idx]
-                meta = results["metadatas"][0][idx]
-                dist = results["distances"][0][idx]
-                
-                sem_score = max(0.0, min(1.0, 1.0 - (dist / 2.0)))
-                keyword_score = self._bm25_sim(query_text, doc)
-                
-                hybrid_score = (0.6 * sem_score) + (0.4 * keyword_score)
-                candidates.append({
-                    "document": doc,
-                    "metadata": meta,
-                    "hybrid_score": hybrid_score
-                })
+        try:
+            self._get_client()
+            embed_model = self._get_embedding_model()
+            if self.collection and embed_model:
+                query_embedding = embed_model.encode([query_text]).tolist()
+                tenant_filter = {
+                    "$or": [
+                        {"tenant_id": "public"},
+                        {"tenant_id": tenant_id}
+                    ]
+                }
+                results = self.collection.query(
+                    query_embeddings=query_embedding,
+                    n_results=10,
+                    where=tenant_filter
+                )
+                if results and results["documents"] and len(results["documents"]) > 0:
+                    for idx in range(len(results["documents"][0])):
+                        doc = results["documents"][0][idx]
+                        meta = results["metadatas"][0][idx]
+                        dist = results["distances"][0][idx]
+                        sem_score = max(0.0, min(1.0, 1.0 - (dist / 2.0)))
+                        keyword_score = self._bm25_sim(query_text, doc)
+                        hybrid_score = (0.6 * sem_score) + (0.4 * keyword_score)
+                        candidates.append({
+                            "document": doc,
+                            "metadata": meta,
+                            "hybrid_score": hybrid_score
+                        })
+        except Exception as e:
+            print(f"RAG retrieval notice: {e}")
                 
         candidates = sorted(candidates, key=lambda x: x["hybrid_score"], reverse=True)
         top_candidates = candidates[:3]

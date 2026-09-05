@@ -1,20 +1,30 @@
 import os
 import re
 import json
-import torch
-from transformers import AutoTokenizer, AutoModelForTokenClassification
 
 class NERExtractor:
-    def __init__(self, model_dir="d:/internship/carbonledger/models/fine_tuned/ner"):
-        self.model_dir = model_dir
-        self.fallback_dir = "d:/internship/carbonledger/models/saved_models/ner_tagger"
-        self.pretrained_cache_dir = "d:/internship/carbonledger/models/pretrained/distilbert-base-uncased"
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+    def __init__(self, model_dir="models/fine_tuned/ner"):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.model_dir = os.path.join(project_root, model_dir) if not os.path.isabs(model_dir) else model_dir
+        self.fallback_dir = os.path.join(project_root, "models", "saved_models", "ner_tagger")
+        self.pretrained_cache_dir = os.path.join(project_root, "models", "pretrained", "distilbert-base-uncased")
+        self.device = 'cpu'
         
         # Unstructured fallback patterns
         self.invoice_num_pattern = re.compile(r"(?:Invoice\s*#|INV-|UTIL-|PO-|Reference\s*Number:\s*)(\w+(?:-\w+)*)", re.IGNORECASE)
         self.supplier_pattern = re.compile(r"(?:Supplier|Vendor|Supplier\s*ID):\s*(\w+)", re.IGNORECASE)
         self.gst_pattern = re.compile(r"GST\s*(?:Number|ID)?:?\s*([A-Z0-9]{15})", re.IGNORECASE)
+        
+        self.tags = [
+            "O", "B-invoice_number", "I-invoice_number", "B-supplier", "I-supplier",
+            "B-gst", "B-material", "I-material", "B-quantity", "B-unit", "B-weight",
+            "B-currency", "B-country", "B-vehicle", "B-fuel", "B-distance",
+            "B-electricity_consumption", "B-plant", "B-facility", "B-emission_source",
+            "B-shipping_method", "B-port", "B-transport_mode"
+        ]
+        self.idx2tag = {idx: tag for idx, tag in enumerate(self.tags)}
+        self.tokenizer = None
+        self.model = None
         
         target_path = None
         if os.path.exists(os.path.join(self.model_dir, "model.safetensors")) or os.path.exists(os.path.join(self.model_dir, "pytorch_model.bin")):
@@ -23,43 +33,22 @@ class NERExtractor:
             target_path = self.fallback_dir
             
         if target_path:
-            tags_path = os.path.join(target_path, "tags.json")
-            if os.path.exists(tags_path):
-                with open(tags_path, "r") as f:
-                    self.tags = json.load(f)
-            else:
-                self.tags = [
-                    "O", "B-invoice_number", "I-invoice_number", "B-supplier", "I-supplier",
-                    "B-gst", "B-material", "I-material", "B-quantity", "B-unit", "B-weight",
-                    "B-currency", "B-country", "B-vehicle", "B-fuel", "B-distance",
-                    "B-electricity_consumption", "B-plant", "B-facility", "B-emission_source",
-                    "B-shipping_method", "B-port", "B-transport_mode"
-                ]
-            self.idx2tag = {idx: tag for idx, tag in enumerate(self.tags)}
-            print(f"Loading transformer NERExtractor from: {target_path} on {self.device}")
-            self.tokenizer = AutoTokenizer.from_pretrained(target_path)
-            self.model = AutoModelForTokenClassification.from_pretrained(target_path)
-            self.model.to(self.device)
-            self.model.eval()
-        else:
-            print("Fine-tuned or saved NER models not found. Auto-downloading/caching distilbert-base-uncased token classifier...")
-            os.makedirs(self.pretrained_cache_dir, exist_ok=True)
-            self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", cache_dir=self.pretrained_cache_dir)
-            self.tags = [
-                "O", "B-invoice_number", "I-invoice_number", "B-supplier", "I-supplier",
-                "B-gst", "B-material", "I-material", "B-quantity", "B-unit", "B-weight",
-                "B-currency", "B-country", "B-vehicle", "B-fuel", "B-distance",
-                "B-electricity_consumption", "B-plant", "B-facility", "B-emission_source",
-                "B-shipping_method", "B-port", "B-transport_mode"
-            ]
-            self.idx2tag = {idx: tag for idx, tag in enumerate(self.tags)}
-            self.model = AutoModelForTokenClassification.from_pretrained(
-                "distilbert-base-uncased",
-                num_labels=len(self.tags),
-                cache_dir=self.pretrained_cache_dir
-            )
-            self.model.to(self.device)
-            self.model.eval()
+            try:
+                import torch
+                from transformers import AutoTokenizer, AutoModelForTokenClassification
+                self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+                tags_path = os.path.join(target_path, "tags.json")
+                if os.path.exists(tags_path):
+                    with open(tags_path, "r") as f:
+                        self.tags = json.load(f)
+                    self.idx2tag = {idx: tag for idx, tag in enumerate(self.tags)}
+                print(f"Loading transformer NERExtractor from: {target_path} on {self.device}")
+                self.tokenizer = AutoTokenizer.from_pretrained(target_path)
+                self.model = AutoModelForTokenClassification.from_pretrained(target_path)
+                self.model.to(self.device)
+                self.model.eval()
+            except Exception as e:
+                print(f"NERExtractor model load note: {e}")
 
     def extract(self, text):
         entities = {

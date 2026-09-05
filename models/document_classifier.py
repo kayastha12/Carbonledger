@@ -1,9 +1,7 @@
 import os
-import torch
 import json
 import time
 from typing import Dict, Any
-from transformers import AutoTokenizer, AutoModelForSequenceClassification
 
 class DocumentClassifier:
     """
@@ -16,11 +14,14 @@ class DocumentClassifier:
         self.fallback_dir = os.path.join(project_root, "models", "saved_models", "distilbert")
         self.pretrained_cache_dir = os.path.join(project_root, "models", "pretrained", "distilbert-base-uncased")
         
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+        self.device = 'cpu'
         self.tokenizer = None
         self.model = None
-        self.label_map = {}
-        self.inv_label_map = {}
+        self.label_map = {
+            "Invoice": 0, "Purchase Order": 1, "Packing List": 2, "Bill of Lading": 3,
+            "Electricity Bill": 4, "Water Bill": 5, "Fuel Receipt": 6, "ERP Export": 7, "Supplier Sheet": 8
+        }
+        self.inv_label_map = {v: k for k, v in self.label_map.items()}
         self.is_fine_tuned = False
         
         target_path = None
@@ -32,33 +33,23 @@ class DocumentClassifier:
             self.is_fine_tuned = True
             
         if target_path:
-            label_map_path = os.path.join(target_path, "label_map.json")
-            if os.path.exists(label_map_path):
-                with open(label_map_path, "r") as f:
-                    self.label_map = json.load(f)
-                self.inv_label_map = {v: k for k, v in self.label_map.items()}
-            
-            print(f"Loading DocumentClassifier from: {target_path} on {self.device}")
-            self.tokenizer = AutoTokenizer.from_pretrained(target_path)
-            self.model = AutoModelForSequenceClassification.from_pretrained(target_path)
-            self.model.to(self.device)
-            self.model.eval()
-        else:
-            print("Fine-tuned or saved classifier models not found. Auto-downloading/caching distilbert-base-uncased...")
-            os.makedirs(self.pretrained_cache_dir, exist_ok=True)
-            self.tokenizer = AutoTokenizer.from_pretrained("distilbert-base-uncased", cache_dir=self.pretrained_cache_dir)
-            self.label_map = {
-                "Invoice": 0, "Purchase Order": 1, "Packing List": 2, "Bill of Lading": 3,
-                "Electricity Bill": 4, "Water Bill": 5, "Fuel Receipt": 6, "ERP Export": 7, "Supplier Sheet": 8
-            }
-            self.inv_label_map = {v: k for k, v in self.label_map.items()}
-            self.model = AutoModelForSequenceClassification.from_pretrained(
-                "distilbert-base-uncased", 
-                num_labels=len(self.label_map),
-                cache_dir=self.pretrained_cache_dir
-            )
-            self.model.to(self.device)
-            self.model.eval()
+            try:
+                import torch
+                from transformers import AutoTokenizer, AutoModelForSequenceClassification
+                self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
+                label_map_path = os.path.join(target_path, "label_map.json")
+                if os.path.exists(label_map_path):
+                    with open(label_map_path, "r") as f:
+                        self.label_map = json.load(f)
+                    self.inv_label_map = {v: k for k, v in self.label_map.items()}
+                
+                print(f"Loading DocumentClassifier from: {target_path} on {self.device}")
+                self.tokenizer = AutoTokenizer.from_pretrained(target_path)
+                self.model = AutoModelForSequenceClassification.from_pretrained(target_path)
+                self.model.to(self.device)
+                self.model.eval()
+            except Exception as e:
+                print(f"DocumentClassifier model load note: {e}")
 
     def classify_with_details(self, ocr_text: str) -> Dict[str, Any]:
         if not self.tokenizer or not self.model:

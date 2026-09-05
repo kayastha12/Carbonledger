@@ -1,28 +1,28 @@
 import os
 import pandas as pd
 import difflib
-import torch
-from sentence_transformers import SentenceTransformer
 
 class SupplierRiskModel:
     def __init__(self, 
-                 suppliers_csv="d:/internship/carbonledger/datasets/output/master/suppliers.csv",
-                 audits_csv="d:/internship/carbonledger/datasets/output/transactional/audits.csv"):
-        self.suppliers_csv = suppliers_csv
-        self.audits_csv = audits_csv
-        self.device = torch.device('cuda') if torch.cuda.is_available() else torch.device('cpu')
-        
-        # Load contrastive matcher as base encoder
-        matcher_dir = "d:/internship/carbonledger/models/saved_models/contrastive_matcher"
-        if os.path.exists(matcher_dir):
-            self.model = SentenceTransformer(matcher_dir)
-        else:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2")
-            
-        self.model.to(self.device)
+                 suppliers_csv="datasets/output/master/suppliers.csv",
+                 audits_csv="datasets/output/transactional/audits.csv"):
+        project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+        self.suppliers_csv = os.path.join(project_root, suppliers_csv) if not os.path.isabs(suppliers_csv) else suppliers_csv
+        self.audits_csv = os.path.join(project_root, audits_csv) if not os.path.isabs(audits_csv) else audits_csv
+        self.device = 'cpu'
+        self.model = None
         self.suppliers_df = None
         self.audits_df = None
         self._load_data()
+
+    def _get_model(self):
+        if self.model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception as e:
+                print(f"SupplierRiskModel encoder note: {e}")
+        return self.model
 
     def _load_data(self):
         if os.path.exists(self.suppliers_csv):
@@ -34,13 +34,17 @@ class SupplierRiskModel:
         """
         Calculates semantic similarity using SentenceTransformer and lexical similarity using difflib.
         """
-        with torch.no_grad():
-            emb_a = self.model.encode([name_a], convert_to_tensor=True)
-            emb_b = self.model.encode([name_b], convert_to_tensor=True)
-            # Cosine similarity
-            sem_sim = torch.nn.functional.cosine_similarity(emb_a, emb_b).item()
-            
         lex_sim = difflib.SequenceMatcher(None, name_a.lower(), name_b.lower()).ratio()
+        sem_sim = lex_sim
+        model = self._get_model()
+        if model:
+            try:
+                import torch
+                emb_a = model.encode([name_a], convert_to_tensor=True)
+                emb_b = model.encode([name_b], convert_to_tensor=True)
+                sem_sim = torch.nn.functional.cosine_similarity(emb_a, emb_b).item()
+            except Exception:
+                pass
         
         # Hybrid confidence score
         confidence = (0.7 * sem_sim) + (0.3 * lex_sim)

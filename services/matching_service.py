@@ -3,7 +3,6 @@ import pandas as pd
 import difflib
 import numpy as np
 from typing import Optional, Dict, Any, List
-from sentence_transformers import SentenceTransformer
 from vector_db.chroma_service import ChromaService
 from services.emission_factor_service import EmissionFactorService
 
@@ -18,16 +17,17 @@ class MatchingService:
         self.suppliers_csv = suppliers_csv_path or os.path.join(project_root, "datasets", "output", "master", "suppliers.csv")
         self.supplier_master = []
         self.factor_service = EmissionFactorService.get_instance()
-        
-        # Load SentenceTransformer for Supplier matching
-        pretrained_cache = os.path.join(project_root, "models", "pretrained", "all-MiniLM-L6-v2")
-        try:
-            self.model = SentenceTransformer("all-MiniLM-L6-v2", cache_folder=pretrained_cache)
-        except Exception as e:
-            print(f"Warning: SentenceTransformer load for supplier matcher failed ({e})")
-            self.model = None
-            
+        self.model = None
         self._load_suppliers()
+
+    def _get_model(self):
+        if self.model is None:
+            try:
+                from sentence_transformers import SentenceTransformer
+                self.model = SentenceTransformer("all-MiniLM-L6-v2")
+            except Exception as e:
+                print(f"Warning: SentenceTransformer load for supplier matcher note: {e}")
+        return self.model
 
     def _load_suppliers(self):
         if os.path.exists(self.suppliers_csv):
@@ -55,10 +55,11 @@ class MatchingService:
         
         q_emb = None
         master_embs = None
-        if self.model:
+        model = self._get_model()
+        if model:
             try:
-                q_emb = self.model.encode([query_name])[0]
-                master_embs = self.model.encode(self.supplier_master)
+                q_emb = model.encode([query_name])[0]
+                master_embs = model.encode(self.supplier_master)
             except Exception:
                 pass
                 
