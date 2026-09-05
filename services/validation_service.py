@@ -3,7 +3,7 @@ from typing import List, Dict, Any
 class ValidationService:
     """
     ValidationService handles business schema verification and input-versus-output
-    data fidelity compliance checks.
+    data fidelity compliance checks without generating fallback records.
     """
     def __init__(self):
         pass
@@ -15,9 +15,9 @@ class ValidationService:
         report = []
         for r in records:
             errors = []
-            if not r.get("material") or r.get("material") == "Unspecified Material":
+            if not r.get("material"):
                 errors.append("Missing Material")
-            if r.get("quantity") is None or float(r.get("quantity", 0)) <= 0:
+            if r.get("quantity") is None or float(r.get("quantity", 0) or 0) <= 0:
                 errors.append("Invalid Quantity")
             if not r.get("unit"):
                 errors.append("Missing Unit")
@@ -49,14 +49,22 @@ class ValidationService:
             ext = extracted_records[idx]
             inv = inventory_records[idx]
 
-            if str(ext.get("material")).strip() != str(inv.get("material")).strip():
-                mismatches.append(f"Row {idx+1} Material mismatch: Extracted '{ext.get('material')}' vs Inventory '{inv.get('material')}'")
+            ext_mat = ext.get("material")
+            inv_mat = inv.get("material")
+            if str(ext_mat).strip() != str(inv_mat).strip():
+                mismatches.append(f"Row {idx+1} Material mismatch: Extracted '{ext_mat}' vs Inventory '{inv_mat}'")
 
-            if float(ext.get("quantity", 0)) != float(inv.get("quantity", 0)):
-                mismatches.append(f"Row {idx+1} Quantity mismatch: Extracted {ext.get('quantity')} vs Inventory {inv.get('quantity')}")
+            ext_qty = ext.get("quantity")
+            inv_qty = inv.get("quantity")
+            if (ext_qty is None and inv_qty is not None) or (ext_qty is not None and inv_qty is None):
+                mismatches.append(f"Row {idx+1} Quantity mismatch: Extracted {ext_qty} vs Inventory {inv_qty}")
+            elif ext_qty is not None and inv_qty is not None and abs(float(ext_qty) - float(inv_qty)) > 1e-5:
+                mismatches.append(f"Row {idx+1} Quantity mismatch: Extracted {ext_qty} vs Inventory {inv_qty}")
 
-            if str(ext.get("unit")).strip() != str(inv.get("unit")).strip():
-                mismatches.append(f"Row {idx+1} Unit mismatch: Extracted '{ext.get('unit')}' vs Inventory '{inv.get('unit')}'")
+            ext_unit = ext.get("unit")
+            inv_unit = inv.get("unit")
+            if str(ext_unit).strip() != str(inv_unit).strip():
+                mismatches.append(f"Row {idx+1} Unit mismatch: Extracted '{ext_unit}' vs Inventory '{inv_unit}'")
 
         status = "PASS" if not mismatches else "FAIL"
 

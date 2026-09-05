@@ -375,11 +375,6 @@ def init_db():
         VALUES ('INV-2026-00101', ?, 'Starter Plan', 'monthly', 49.0, 'PAID', 'Visa ending in 4242', ?, ?, ?, '/api/v1/user/billing/invoice/INV-2026-00101')
         """, (sub_id, now_str, now_str, renewal_str))
 
-        cursor.execute("""
-        INSERT INTO user_activities (user_id, activity_type, description, ip_address, created_at)
-        VALUES (?, 'ACCOUNT_CREATED', 'Subscribed to Starter Plan with 1,000 token monthly balance', '127.0.0.1', ?)
-        """, (sub_id, now_str))
-
     # Seed initial rules if empty
     cursor.execute("SELECT COUNT(*) FROM custom_rules")
     if cursor.fetchone()[0] == 0:

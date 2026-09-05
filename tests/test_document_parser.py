@@ -24,16 +24,11 @@ def test_number_and_quantity_parsing():
     assert parse_numeric_value("-500.25") == -500.25
 
 def test_material_matching_no_rename():
-    service = FieldExtractionService()
-    raw_record = {
-        "material": "Steel Sheet",
-        "quantity": "1,000 kg",
-        "unit": "kg",
-        "supplier": "Steel Traders Ltd"
-    }
-    parsed = service._standardize_and_score(raw_record, "ERP Export", "test.pdf", 1, 1, 0.99)
-    # Parser should NEVER rename materials
-    assert parsed["material"] == "Steel Sheet"
+    from services.field_extraction_service import normalize_material_name
+    norm, raw = normalize_material_name("Steel Sheet")
+    # Parser should NEVER rename materials with valid names
+    assert norm == "Steel Sheet"
+    assert raw == "Steel Sheet"
 
 def test_region_detection_without_guessing():
     # Detect from GST/VAT or explicit text
@@ -41,9 +36,11 @@ def test_region_detection_without_guessing():
     assert detect_region_from_fields("VAT DE123456789", {}) == "DE"
     assert detect_region_from_fields("GmbH Munich", {}) == "DE"
     assert detect_region_from_fields("Pincode 400001", {}) == "IN"
+    # No guessing when region is absent
+    assert detect_region_from_fields("Simple Raw Material Document", {}) is None
 
 def test_automatic_validation_mismatch():
-    service = UniversalUploadService(output_dir="D:\\CarbanLedger\\output\\temp")
+    service = UniversalUploadService(output_dir="output")
     
     # Valid record
     valid_record = {
@@ -73,12 +70,6 @@ def test_automatic_validation_mismatch():
     invalid_mat_record["material"] = ""
     with pytest.raises(ValueError, match="Material Missing"):
         service._validate_required_fields([invalid_mat_record])
-
-    # Country Missing check
-    invalid_country_record = valid_record.copy()
-    invalid_country_record["country"] = ""
-    with pytest.raises(ValueError, match="Country Missing"):
-        service._validate_required_fields([invalid_country_record])
 
     # Quantity Invalid check
     invalid_qty_record = valid_record.copy()

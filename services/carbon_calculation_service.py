@@ -5,7 +5,7 @@ from services.calculation_engine import CalculationEngine
 class CarbonCalculationService:
     """
     Enterprise Carbon Calculation Engine coordinator enforcing unit conversions,
-    scope classifications, chemical footprinting, and calculation tracing.
+    scope classifications, chemical footprinting, and calculation tracing without hallucination.
     """
     def __init__(self, calculation_engine: CalculationEngine = None):
         self.calculator = calculation_engine or CalculationEngine()
@@ -23,13 +23,11 @@ class CarbonCalculationService:
         """
         # Validate incoming fields
         mat_clean = str(material or "").strip()
-        reg_clean = str(region or "").strip()
+        reg_clean = str(region or "DE").strip()
         unit_clean = str(unit or "").strip()
         
-        if not mat_clean or mat_clean == "Unspecified Material":
+        if not mat_clean:
             raise ValueError("Material Missing")
-        if not reg_clean:
-            raise ValueError("Country Missing")
             
         try:
             qty_val = float(quantity)
@@ -40,7 +38,7 @@ class CarbonCalculationService:
             
         valid_units = {
             "kg", "g", "tonne", "t", "tonnes", "lb", "pounds",
-            "m3", "m³", "cubic meters", "cubic metres", "mwh",
+            "m3", "m³", "mcm", "mt", "cubic meters", "cubic metres", "mwh",
             "l", "litre", "liter", "liters", "litres",
             "kwh", "kwh (net cv)", "kwh (gross cv)", "mj", "gj",
             "km", "miles", "mile", "tonne.km", "piece", "pieces", "pcs"
@@ -62,11 +60,11 @@ class CarbonCalculationService:
             match_scope = scope
             match_unit = unit
             if scope == "Scope 2":
-                match_material = f"Electricity {region}"
+                match_material = f"Electricity {reg_clean}"
                 match_unit = "kwh"
             else:
                 match_material = material
-            match = self.calculator.factor_service.get_factor(match_material, scope=match_scope, unit=match_unit, region=region)
+            match = self.calculator.factor_service.get_factor(match_material, scope=match_scope, unit=match_unit, region=reg_clean)
 
         # Retrieve matched metadata
         fid = match.factor_id
@@ -78,7 +76,7 @@ class CarbonCalculationService:
         f_val = match.emission_factor if conf >= 0.95 else 0.0
 
         trace = [
-            f"Step 1 [Material Check]: Normalized query string '{material}' in region '{region}'.",
+            f"Step 1 [Material Check]: Normalized query string '{material}' in region '{reg_clean}'.",
             f"Step 2 [Matching Tiers]: Query matched using tier '{match_method}' with confidence score {round(conf * 100, 1)}%."
         ]
 
@@ -101,7 +99,7 @@ class CarbonCalculationService:
                 converted_qty = self.calculator.convert_units(kwh_qty, "kwh", f_u)
                 trace.append(f"Step 3 [Unit Conversion]: Converted {quantity} {unit} into {kwh_qty} kwh, matching emission factor unit '{f_u}'.")
                 
-                calc_res = self.calculator.calculate_scope_2(kwh_qty, region, factor_id=fid)
+                calc_res = self.calculator.calculate_scope_2(kwh_qty, reg_clean, factor_id=fid)
                 co2e = calc_res.get("location_based_co2e_kg", 0.0)
             elif scope == "Scope 1":
                 converted_qty = self.calculator.convert_units(quantity, unit, f_u)

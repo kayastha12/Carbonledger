@@ -45,12 +45,13 @@ export default function AIIntelligenceTab({
     .then(res => res.json())
     .then(data => {
       setIsChatLoading(false);
-      setChatMessages(prev => [...prev, { sender: 'assistant', text: data.answer || 'Analysis complete for your carbon inventory.' }]);
+      const answerText = data.answer || data.response || 'No response received from sustainability assistant.';
+      setChatMessages(prev => [...prev, { sender: 'assistant', text: answerText }]);
       refreshUserData();
     })
     .catch(() => {
       setIsChatLoading(false);
-      setChatMessages(prev => [...prev, { sender: 'assistant', text: 'I evaluated your query against active emissions data. Scope 1 & 2 baseline verified.' }]);
+      setChatMessages(prev => [...prev, { sender: 'assistant', text: 'Unable to reach assistant service. Please check your network connection.' }]);
     });
   };
 

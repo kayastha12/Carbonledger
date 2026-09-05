@@ -599,7 +599,8 @@ class ReportGeneratorService:
     # ---------------------------------------------------------------
     def _generate_audit_json(self, upload_dir: str, df: pd.DataFrame, sections: Dict,
                              audit_rows: List[Dict]) -> str:
-        """Generates comprehensive Audit Trail JSON with all 11 sections."""
+        """Generates comprehensive Audit Trail JSON with all 11 sections and verifiable SHA-256 cryptographic hash chaining."""
+        import hashlib
         path = os.path.join(upload_dir, "audit.json")
 
         # Build row-level audit entries (each row has Factor ID, Formula, Confidence, Timestamp, Report ID)
@@ -625,10 +626,32 @@ class ReportGeneratorService:
                 "report_id": sections["report_id"],
             })
 
+        # Calculate genuine cryptographic SHA-256 hash chain
+        genesis_hash = hashlib.sha256(f"GENESIS_BLOCK_{sections['upload_id']}_{sections['timestamp']}".encode('utf-8')).hexdigest()
+        prev_hash = genesis_hash
+        hash_chained_audit = []
+        
+        for idx, item in enumerate(row_audit):
+            item_raw = json.dumps(item, sort_keys=True, default=str)
+            curr_hash = hashlib.sha256(f"{prev_hash}|{item['timestamp']}|{item_raw}".encode('utf-8')).hexdigest()
+            item_with_hash = dict(item)
+            item_with_hash["block_index"] = idx + 1
+            item_with_hash["previous_hash"] = prev_hash
+            item_with_hash["entry_hash"] = curr_hash
+            hash_chained_audit.append(item_with_hash)
+            prev_hash = curr_hash
+
         audit_package = {
             "report_id": sections["report_id"],
             "generated_at": sections["timestamp"],
             "upload_id": sections["upload_id"],
+            "cryptographic_verification": {
+                "hash_algorithm": "SHA-256",
+                "genesis_block_hash": genesis_hash,
+                "latest_chain_hash": prev_hash,
+                "total_verified_blocks": len(hash_chained_audit),
+                "tamper_evident": True
+            },
             "sections": {
                 "1_executive_summary": sections["executive_summary"],
                 "2_document_summary": sections["document_summary"],
@@ -651,7 +674,7 @@ class ReportGeneratorService:
                 "10_recommendations": sections["recommendations"],
                 "11_audit_trail": {
                     "validation_scores": sections["validation_scores"],
-                    "row_level_audit": row_audit,
+                    "row_level_audit": hash_chained_audit,
                     "pipeline_audit_rows": audit_rows,
                     "manual_corrections": [
                         {

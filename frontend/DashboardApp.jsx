@@ -129,7 +129,7 @@ export default function DashboardApp() {
       .catch(() => {});
   };
 
-  // Fetch Latest Upload Session for Current User
+  // Fetch Latest Upload Session for Dashboard & Reports Tab
   const fetchUserUploadData = () => {
     const token = localStorage.getItem('carbonledger_token');
     if (!token) return;
@@ -138,16 +138,8 @@ export default function DashboardApp() {
       .then(data => {
         if (data && data.records && data.records.length > 0) {
           setUniversalResult(data);
-          setUniversalStatus('calculated');
-          setUniversalUploadId(data.upload_id || '');
-          setReviewedRecords(data.records || []);
-          setParserResponse(data.parser_response || null);
         } else {
           setUniversalResult(null);
-          setUniversalStatus('idle');
-          setUniversalUploadId('');
-          setReviewedRecords([]);
-          setParserResponse(null);
         }
       })
       .catch(() => {
@@ -499,6 +491,7 @@ export default function DashboardApp() {
             showToast={showToast}
             refreshUserData={refreshUserData}
             fetchUserUploadData={fetchUserUploadData}
+            fetchBillingAndActivity={fetchBillingAndActivity}
             setActiveTab={setActiveTab}
             setLowTokenDetails={setLowTokenDetails}
             setShowLowTokenModal={setShowLowTokenModal}
@@ -516,6 +509,8 @@ export default function DashboardApp() {
             universalResult={universalResult}
             currentUser={currentUser}
             currentSub={currentSub}
+            getAuthHeaders={getAuthHeaders}
+            showToast={showToast}
             isDarkMode={isDarkMode}
             themeCard={themeCard}
             themeBorder={themeBorder}
