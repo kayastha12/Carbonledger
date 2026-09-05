@@ -860,6 +860,24 @@ def save_changes(req: SaveChangesRequest, request: Request = None):
 @app.post("/api/upload/approve")
 def approve_and_calculate(req: ApproveRequest, request: Request = None):
     current_user = get_current_user_from_req(request) if request else {"id": 1}
+    print(f"[Approval] APPROVAL_STARTED: upload_id={req.upload_id}, records={len(req.records)}, user_id={current_user['id']}")
+
+    # Idempotency Check: if this upload_id was already calculated for this user, return the existing result
+    try:
+        conn = get_db_connection()
+        cursor = conn.cursor()
+        cursor.execute("SELECT upload_id, total_co2e_kg FROM upload_sessions WHERE upload_id = ? AND user_id = ?", (req.upload_id, current_user["id"]))
+        existing_session = cursor.fetchone()
+        conn.close()
+
+        if existing_session and existing_session["total_co2e_kg"] is not None:
+            print(f"[Approval] Already approved upload #{req.upload_id}, returning latest result.")
+            latest_res = get_latest_upload(request)
+            if latest_res:
+                return latest_res
+    except Exception as e:
+        print(f"[Approval] Idempotency check notice: {e}")
+
     # Token Deduction: 10 tokens per calculation run
     deduct_tokens_or_fail(current_user["id"], 10, "CARBON_CALCULATION", f"Carbon emission calculation and audit approval for upload #{req.upload_id}")
     
@@ -867,11 +885,14 @@ def approve_and_calculate(req: ApproveRequest, request: Request = None):
         # 1. Run required fields validator check
         universal_service._validate_required_fields(req.records)
     except ValueError as val_err:
-        raise HTTPException(status_code=400, detail=str(val_err))
+        raise HTTPException(status_code=422, detail=str(val_err))
         
     try:
         # 2. Run Carbon Engine calculations, persist to DB, and generate reports
+        print(f"[Approval] CALCULATION_STARTED: upload_id={req.upload_id}")
         calc_res = universal_service.calculate_and_save(req.records, upload_id=req.upload_id)
+        summary = calc_res.get("summary", {})
+        print(f"[Approval] CALCULATION_COMPLETE: total_co2e_kg={summary.get('total_co2e_kg')}, scope1={summary.get('scope_1_co2e_kg')}, scope2={summary.get('scope_2_co2e_kg')}, scope3={summary.get('scope_3_co2e_kg')}")
         
         # 3. Associate upload session & calculation results with user_id
         conn = get_db_connection()
@@ -906,11 +927,13 @@ def approve_and_calculate(req: ApproveRequest, request: Request = None):
         conn.close()
         
         record_activity(current_user["id"], "CALCULATION_APPROVED", f"Approved carbon calculations for upload #{req.upload_id} ({len(req.records)} records).")
+        print(f"[Approval] LEDGER_POSTED: {len(calc_res.get('inventory_records', []))} records committed to user ledger.")
         
         calc_res["status"] = "calculated"
         return calc_res
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Failed to calculate emissions for approved records: {e}")
+        print(f"[Approval] Error in calculate_and_save: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to calculate emissions for approved records: {e}")
 
 @app.get("/api/upload/review/{upload_id}")
 def get_review_session(upload_id: str, request: Request = None):

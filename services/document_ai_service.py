@@ -131,8 +131,11 @@ class DocumentAIService:
         if not DOCUMENT_AI_AVAILABLE:
             raise RuntimeError(f"Document AI model could not be imported from {self.model_dir}: {_import_error_msg}")
 
+        file_size_bytes = os.path.getsize(file_path)
         file_hash = self.get_file_hash(file_path)
-        doc_id = f"REAL_DOC_{file_hash[:8]}"
+        doc_id = f"doc_{file_hash[:12]}"
+        print(f"[DocumentAI] UPLOAD: filename={f_name}, size={file_size_bytes} bytes")
+        logs.append(f"[DocumentAI] UPLOAD: filename={f_name}, size={file_size_bytes} bytes")
 
         # Initialize OCR engine if Tesseract is installed
         ocr_engine = None
@@ -154,11 +157,17 @@ class DocumentAIService:
                 ocr_engine_name = "tesseract"
 
         pages_count = len(parsed_doc.get("pages", []))
+        pages_with_text = len([p for p in parsed_doc.get("pages", []) if p.get("text") and str(p.get("text")).strip()])
         tables_count = 0
+
+        print(f"[DocumentAI] PDF_OPEN: pages={pages_count}")
+        print(f"[DocumentAI] TEXT_EXTRACT: pages_with_text={pages_with_text}")
+        logs.append(f"[DocumentAI] PDF_OPEN: pages={pages_count}, TEXT_EXTRACT: pages_with_text={pages_with_text}")
 
         # Segment document
         segmenter = DocumentSegmenter()
         segments = segmenter.segment_document(parsed_doc)
+        print(f"[DocumentAI] SEGMENTATION: segments={len(segments)}")
         logs.append(f"[DocumentAI] Segmented document into {len(segments)} logical segment(s).")
 
         classifier = RuleBasedDocumentClassifier()
@@ -486,6 +495,9 @@ class DocumentAIService:
             if self.is_valid_carbon_record(rec):
                 valid_records.append(rec)
 
+        print(f"[DocumentAI] TABLES_DETECT: tables_found={tables_count}")
+        print(f"[DocumentAI] CARBON_RECORDS_MAPPED: candidate_records={len(flat_records)}")
+        print(f"[DocumentAI] VALIDATION_COMPLETE: valid_records={len(valid_records)}")
         logs.append(f"[DocumentAI] Extracted {len(valid_records)} valid carbon-relevant records (discarded {len(flat_records) - len(valid_records)} non-activity/empty rows).")
 
         # Compile overall validation and confidence

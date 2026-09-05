@@ -165,13 +165,17 @@ export default function UploadReviewTab({
     });
   };
 
+  const [approvingState, setApprovingState] = useState('idle'); // 'idle' | 'approving' | 'success' | 'error'
+
   const handleApproveAndCalculate = () => {
-    if (!universalUploadId || reviewedRecords.length === 0) return;
+    if (!universalUploadId || reviewedRecords.length === 0 || approvingState === 'approving') return;
     if ((currentUser?.token_balance || 0) < 10) {
       setLowTokenDetails({ required: 10, current: currentUser?.token_balance || 0 });
       setShowLowTokenModal(true);
       return;
     }
+
+    setApprovingState('approving');
 
     fetch(`${API_BASE}/api/upload/approve`, {
       method: 'POST',
@@ -181,21 +185,49 @@ export default function UploadReviewTab({
     .then(res => res.json().then(data => ({ status: res.status, body: data })))
     .then(({ status, body }) => {
       if (status === 402) {
+        setApprovingState('idle');
         setLowTokenDetails({ required: 10, current: currentUser?.token_balance || 0 });
         setShowLowTokenModal(true);
         return;
       }
-      if (status !== 200) throw new Error(body.detail || 'Calculation failed');
-      showToast('Calculations approved and compliance reports generated!');
+      if (status === 401) {
+        setApprovingState('error');
+        showToast('Your session has expired. Please sign in again.');
+        return;
+      }
+      if (status === 422) {
+        setApprovingState('error');
+        showToast(body.detail || 'The extracted data requires correction before approval.');
+        return;
+      }
+      if (status >= 500) {
+        setApprovingState('error');
+        showToast('Carbon calculation failed. Please try again.');
+        return;
+      }
+      if (status !== 200) {
+        setApprovingState('error');
+        showToast(body.detail || 'Approval failed.');
+        return;
+      }
+
+      setApprovingState('success');
+      showToast('Document approved successfully. Carbon emissions calculated.');
       if (setUniversalResult) {
         setUniversalResult(body);
       }
       if (fetchUserUploadData) fetchUserUploadData();
       refreshUserData();
       if (fetchBillingAndActivity) fetchBillingAndActivity();
-      setActiveTab('Dashboard');
+      setTimeout(() => {
+        setApprovingState('idle');
+        setActiveTab('Dashboard');
+      }, 500);
     })
-    .catch(err => alert(err.message));
+    .catch(err => {
+      setApprovingState('error');
+      showToast(err.message || 'Carbon calculation failed. Please try again.');
+    });
   };
 
   const formatCost = (cost, currency) => {
@@ -388,13 +420,21 @@ export default function UploadReviewTab({
               </p>
             </div>
             <button 
+              disabled={approvingState === 'approving'}
               onClick={handleApproveAndCalculate}
               style={{
-                padding: '11px 24px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#fff',
-                border: 'none', fontWeight: '800', cursor: 'pointer', fontSize: '13px',
-                boxShadow: '0 4px 12px rgba(59,130,246,0.3)'
+                padding: '11px 24px', borderRadius: '10px',
+                backgroundColor: approvingState === 'success' ? '#10b981' : (approvingState === 'error' ? '#ef4444' : '#3b82f6'),
+                color: '#fff', border: 'none', fontWeight: '800',
+                cursor: approvingState === 'approving' ? 'not-allowed' : 'pointer',
+                opacity: approvingState === 'approving' ? 0.7 : 1,
+                fontSize: '13px', boxShadow: '0 4px 12px rgba(59,130,246,0.3)',
+                display: 'flex', alignItems: 'center', gap: '8px'
               }}>
-              Approve & Calculate (⚡ 10 Tokens)
+              {approvingState === 'approving' && '⏳ Approving & Calculating...'}
+              {approvingState === 'success' && '✓ Approved & Calculated'}
+              {approvingState === 'error' && '⚠️ Retry Approval & Calculate'}
+              {approvingState === 'idle' && 'Approve & Calculate (⚡ 10 Tokens)'}
             </button>
           </div>
 

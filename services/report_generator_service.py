@@ -64,8 +64,14 @@ class ReportGeneratorService:
         df["report_timestamp"] = timestamp
 
         # Ensure required row-level columns exist with safe defaults
-        for col, default in [("factor_id", "N/A"), ("formula", "N/A"),
-                             ("confidence", 0.0), ("extraction_confidence", 0.0)]:
+        for col, default in [
+            ("factor_id", "N/A"), ("formula", "N/A"),
+            ("confidence", 0.0), ("extraction_confidence", 0.0),
+            ("co2_kg", 0.0), ("ch4_kg", 0.0), ("n2o_kg", 0.0), ("co2e_kg", 0.0),
+            ("cbam_cost_eur", 0.0), ("emission_factor", 0.0), ("scope", "Scope 3"),
+            ("calculation_status", "Calculated"), ("material", "N/A"), ("supplier", "N/A"),
+            ("quantity", 0.0), ("unit", "kg"), ("country", "DE")
+        ]:
             if col not in df.columns:
                 df[col] = default
 
