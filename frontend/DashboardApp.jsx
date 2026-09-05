@@ -484,6 +484,8 @@ export default function DashboardApp() {
             setUniversalFile={setUniversalFile}
             universalStatus={universalStatus}
             setUniversalStatus={setUniversalStatus}
+            universalResult={universalResult}
+            setUniversalResult={setUniversalResult}
             universalUploadId={universalUploadId}
             setUniversalUploadId={setUniversalUploadId}
             reviewedRecords={reviewedRecords}

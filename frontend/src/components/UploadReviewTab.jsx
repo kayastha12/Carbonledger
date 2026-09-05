@@ -1,5 +1,6 @@
 import React, { useRef, useState } from 'react';
 import { API_BASE } from '../config';
+import sampleRecords from '../sample_records.json';
 
 export default function UploadReviewTab({
   currentUser,
@@ -7,6 +8,8 @@ export default function UploadReviewTab({
   setUniversalFile,
   universalStatus,
   setUniversalStatus,
+  universalResult,
+  setUniversalResult,
   universalUploadId,
   setUniversalUploadId,
   reviewedRecords,
@@ -123,6 +126,45 @@ export default function UploadReviewTab({
     });
   };
 
+  const handleLoadSampleInvoice = () => {
+    const uploadTimestamp = Date.now();
+    activeUploadTimestampRef.current = uploadTimestamp;
+    setUniversalStatus('uploading');
+    setErrorMessage('');
+
+    const formData = new FormData();
+    formData.append('payload', JSON.stringify(sampleRecords));
+
+    fetch(`${API_BASE}/api/upload/universal`, {
+      method: 'POST',
+      headers: { 'Authorization': `Bearer ${localStorage.getItem('carbonledger_token')}` },
+      body: formData
+    })
+    .then(res => res.json().then(data => ({ status: res.status, body: data })))
+    .then(({ status, body }) => {
+      if (status === 200 && body.records) {
+        setUniversalUploadId(body.upload_id || `upload_${Date.now()}`);
+        setReviewedRecords(body.records);
+        setParserResponse(body.parser_response || null);
+        setUniversalStatus('parsed');
+        showToast(`Loaded ${body.records.length} transactional activity items for review!`);
+      } else {
+        // Fallback directly to sample records
+        setUniversalUploadId(`upload_sample_${Date.now().toString(36)}`);
+        setReviewedRecords(sampleRecords);
+        setUniversalStatus('parsed');
+        showToast(`Loaded ${sampleRecords.length} transactional activity items!`);
+      }
+      refreshUserData();
+    })
+    .catch(() => {
+      setUniversalUploadId(`upload_sample_${Date.now().toString(36)}`);
+      setReviewedRecords(sampleRecords);
+      setUniversalStatus('parsed');
+      showToast(`Loaded ${sampleRecords.length} transactional activity items!`);
+    });
+  };
+
   const handleApproveAndCalculate = () => {
     if (!universalUploadId || reviewedRecords.length === 0) return;
     if ((currentUser?.token_balance || 0) < 10) {
@@ -145,7 +187,10 @@ export default function UploadReviewTab({
       }
       if (status !== 200) throw new Error(body.detail || 'Calculation failed');
       showToast('Calculations approved and compliance reports generated!');
-      fetchUserUploadData();
+      if (setUniversalResult) {
+        setUniversalResult(body);
+      }
+      if (fetchUserUploadData) fetchUserUploadData();
       refreshUserData();
       if (fetchBillingAndActivity) fetchBillingAndActivity();
       setActiveTab('Dashboard');
@@ -213,6 +258,17 @@ export default function UploadReviewTab({
               boxShadow: '0 4px 12px rgba(16,185,129,0.3)', fontSize: '13px'
             }}>
             {universalStatus === 'uploading' ? 'Extracting Parameters...' : 'Parse Document (⚡ 15 Tokens)'}
+          </button>
+          <button 
+            type="button"
+            disabled={universalStatus === 'uploading'}
+            onClick={handleLoadSampleInvoice}
+            style={{
+              padding: '11px 20px', borderRadius: '10px', backgroundColor: isDarkMode ? '#1e293b' : '#f1f5f9',
+              color: '#38bdf8', border: '1px solid #38bdf8', fontWeight: '700', cursor: 'pointer',
+              fontSize: '13px', display: 'flex', alignItems: 'center', gap: '6px'
+            }}>
+            ✨ Load Sample Invoice (18 Line Items)
           </button>
         </div>
 

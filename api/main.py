@@ -1092,6 +1092,48 @@ def get_latest_upload(request: Request = None):
         "reports": reports_map
     }
 
+@app.get("/api/reports/download")
+def download_report_file(path: str, request: Request = None):
+    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    allowed_dir = os.path.abspath(os.path.join(project_root, "output", "reports"))
+    target_path = os.path.abspath(path)
+    
+    # Check if target_path exists directly or within allowed_dir
+    if not os.path.exists(target_path):
+        rel_target = os.path.abspath(os.path.join(allowed_dir, os.path.basename(path)))
+        if os.path.exists(rel_target):
+            target_path = rel_target
+        else:
+            # Check within uploads subdirectory
+            for root, _, files in os.walk(allowed_dir):
+                if os.path.basename(path) in files:
+                    target_path = os.path.join(root, os.path.basename(path))
+                    break
+                    
+    if not os.path.exists(target_path):
+        raise HTTPException(status_code=404, detail="Requested report file does not exist. Please run calculations first.")
+        
+    filename = os.path.basename(target_path)
+    media_type = "application/octet-stream"
+    if filename.endswith(".pdf"):
+        media_type = "application/pdf"
+    elif filename.endswith(".xlsx"):
+        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+    elif filename.endswith(".json"):
+        media_type = "application/json"
+    elif filename.endswith(".csv"):
+        media_type = "text/csv"
+        
+    return FileResponse(
+        target_path,
+        media_type=media_type,
+        filename=filename,
+        headers={
+            "Content-Disposition": f'attachment; filename="{filename}"',
+            "Access-Control-Expose-Headers": "Content-Disposition"
+        }
+    )
+
 @app.get("/api/v1/settings")
 def get_settings():
     conn = get_db_connection()
