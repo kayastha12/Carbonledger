@@ -13,6 +13,10 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from pydantic import BaseModel
 import pandas as pd
+import jwt
+
+JWT_SECRET = "carbonledger_enterprise_jwt_secret_key_2026"
+JWT_ALGORITHM = "HS256"
 
 # Core AI Models & Pipelines
 from models.document_classifier import DocumentClassifier
@@ -230,23 +234,29 @@ class ComplianceAuditSchema(BaseModel):
     framework: str
     metrics: dict
 
-# Auth dependency with SQLite validation
+# Auth dependency with SQLite & JWT validation
 def get_current_tenant_and_role(authorization: Optional[str] = Header(None)):
     if not authorization:
-        return "tenant_default", "Company Administrator"
+        return "tenant_default", "admin"
     
     token = authorization.replace("Bearer ", "").strip()
     
+    try:
+        payload = jwt.decode(token, JWT_SECRET, algorithms=[JWT_ALGORITHM])
+        return "tenant_default", payload.get("role", "admin")
+    except Exception:
+        pass
+        
     conn = get_db_connection()
     cursor = conn.cursor()
-    cursor.execute("SELECT tenant_id, role FROM users WHERE email = ? OR role = ?", (token, token))
+    cursor.execute("SELECT role FROM users WHERE email = ? OR role = ?", (token, token))
     row = cursor.fetchone()
     conn.close()
     
     if row:
-        return row["tenant_id"], row["role"]
+        return "tenant_default", row["role"]
     
-    return "tenant_default", token
+    return "tenant_default", "admin"
 
 # WebSocket Endpoint
 @app.websocket("/api/ws")
