@@ -3,7 +3,7 @@ import json
 import uuid
 import pandas as pd
 from fpdf import FPDF
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional, Tuple, Union
 
 
 class ReportGeneratorService:
