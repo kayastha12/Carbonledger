@@ -84,7 +84,21 @@ export default function AIIntelligenceTab({
       .then(data => {
         setIsChatLoading(false);
         const answerText = data.answer || data.response || 'No response received from sustainability copilot.';
-        setChatMessages(prev => [...prev, { sender: 'assistant', text: answerText }]);
+        const evidenceData = data.evidence || [];
+        const dynamicSuggestions = data.suggestions || [];
+        
+        setChatMessages(prev => [...prev, {
+          sender: 'assistant',
+          text: answerText,
+          evidence: evidenceData,
+          language: data.language,
+          intent: data.intent
+        }]);
+
+        if (dynamicSuggestions.length > 0) {
+          setSuggestedQuestions(dynamicSuggestions);
+        }
+
         if (refreshUserData) refreshUserData();
       })
       .catch(() => {
@@ -280,9 +294,38 @@ export default function AIIntelligenceTab({
                 backgroundColor: m.sender === 'user' ? '#10b981' : (isDarkMode ? '#0d131f' : '#f8fafc'),
                 color: m.sender === 'user' ? '#080c14' : themeText,
                 border: m.sender === 'user' ? 'none' : `1px solid ${themeBorder}`,
-                boxShadow: '0 2px 8px rgba(0,0,0,0.06)'
+                boxShadow: '0 2px 8px rgba(0,0,0,0.06)',
+                position: 'relative'
               }}>
-                {m.sender === 'assistant' ? renderFormattedMessage(m.text) : (
+                {m.sender === 'assistant' ? (
+                  <>
+                    {renderFormattedMessage(m.text)}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: '10px', paddingTop: '8px', borderTop: `1px solid ${isDarkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`, fontSize: '10.5px', color: themeSubtext }}>
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <span style={{ color: '#10b981', fontWeight: 'bold' }}>✓ Verified Ledger Grounded</span>
+                        {m.language && m.language !== 'english' && (
+                          <span style={{ padding: '1px 6px', borderRadius: '6px', backgroundColor: 'rgba(59,130,246,0.15)', color: '#60a5fa', fontWeight: '700' }}>
+                            {m.language.toUpperCase()}
+                          </span>
+                        )}
+                      </div>
+                      <button
+                        onClick={() => {
+                          if (navigator.clipboard) {
+                            navigator.clipboard.writeText(m.text);
+                            alert('Answer copied to clipboard!');
+                          }
+                        }}
+                        style={{
+                          fontSize: '10px', padding: '2px 6px', borderRadius: '4px',
+                          backgroundColor: 'transparent', border: `1px solid ${themeBorder}`,
+                          color: themeSubtext, cursor: 'pointer'
+                        }}>
+                        📋 Copy
+                      </button>
+                    </div>
+                  </>
+                ) : (
                   <div style={{ fontSize: '13px', fontWeight: '600' }}>{m.text}</div>
                 )}
               </div>

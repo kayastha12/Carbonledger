@@ -1,296 +1,164 @@
-# CarbonLedger OS — AI Data Assistant & Report Copilot Documentation
+# CarbonLedger AI Copilot — Technical Architecture & Integration Guide
 
-**Version:** 7.1 Enterprise Production  
-**Component:** Context-Aware AI Data & Report Copilot  
-**Repository:** `Carbonledger`  
-**Production URL:** https://carbonledger-app-vxb3.onrender.com/
+**System Version:** 3.0 Enterprise  
+**Core Service:** `services/copilot_engine.py`  
+**API Endpoints:** `/api/rag`, `/api/v1/chat`, `/api/v1/copilot/suggestions`, `/api/v1/reports/context`  
+**Frontend Modules:** `frontend/src/components/AIIntelligenceTab.jsx`, `frontend/src/components/ReportsTab.jsx`  
+**Target Platform:** Local Development & Render Production (`https://carbonledger-app-vxb3.onrender.com/`)  
 
 ---
 
-## 1. AI Architecture Overview
+## 1. Executive Overview
 
-The **CarbonLedger AI Copilot** is a deterministic, context-grounded sustainability copilot embedded within CarbonLedger Enterprise OS. Unlike generic Large Language Model chatbots, the Copilot executes against verified workspace data, active emission factor databases, and calculation engines without fabricating information.
+The **CarbonLedger AI Copilot** is a context-aware, deterministic, multilingual carbon accounting assistant. It bridges raw corporate documents (PDF invoices, purchase orders, freight manifests, utility bills) and regulatory GHG Protocol / EU CBAM compliance reports.
 
-```mermaid
-graph TD
-    User([User Prompt / Cell Click]) --> IntentClassifier[Question Classifier & Intent Router]
-    IntentClassifier --> ContextRetriever[Context Retriever]
-    
-    subgraph Context Engine
-        ContextRetriever --> DocCtx[Document & OCR Context]
-        ContextRetriever --> RecCtx[Record & Factor Context]
-        ContextRetriever --> RepCtx[Report Index & Sheet Context]
-        ContextRetriever --> SelCtx[Selected Row / Cell Context]
-        ContextRetriever --> DashCtx[Dashboard Totals Context]
-    end
-    
-    subgraph Deterministic Tools
-        DocCtx --> CalcTool[Calculator Tool: CarbonCalculationService]
-        RecCtx --> FactorTool[Emission Factor Tool: EmissionFactorService]
-        RepCtx --> RepTool[Report Data Tool: ReportGeneratorService]
-    end
-    
-    CalcTool --> ProvenanceFormatter[Provenance & Traceability Formatter]
-    FactorTool --> ProvenanceFormatter
-    RepTool --> ProvenanceFormatter
-    
-    ProvenanceFormatter --> AntiHallucination[Anti-Hallucination & Policy Guard]
-    AntiHallucination --> CopilotResponse([Verified Traceable Answer])
+### Key Capabilities:
+- **Automatic Multilingual Switching**: Seamlessly supports English, Hindi (Devanagari script), and natural conversational Hinglish.
+- **30+ Deterministic Domain Tools**: All numerical operations ($Q \times EF$, unit normalization, tonne-km freight logistics, regional grid emissions, CBAM certificate exposure) are executed via mathematical engines rather than LLM guesswork.
+- **Zero Mock / Fake Data Fallback**: Answers are strictly grounded in verified database records. When data or emission factors do not exist, the Copilot explicitly clarifies the gap.
+- **Double-Counting Intelligence**: Detects and explains transaction overlaps across Invoices vs. Purchase Orders, Utility Bills vs. Regional Grid Meters, and Purchases vs. Shop-Floor Consumption.
+- **Full Report & Cell Traceability**: Inspects generated compliance sheets, tables, and individual cells, mapping every cell back to its underlying activity record, emission factor, formula, and source document.
+- **Dynamic Conversational Memory**: Resolves multi-turn references and pronouns (*"it"*, *"this"*, *"that"*, *"the previous calculation"*, *"iska"*, *"ye"*) with what-if scenario re-computation.
+
+---
+
+## 2. Core Architectural Flow
+
+```
+USER MESSAGE (English / Hindi / Hinglish)
+    ↓
+1. LANGUAGE DETECTOR (Auto-detects EN / HI / HINGLISH)
+    ↓
+2. INTENT CLASSIFIER & ENTITY EXTRACTOR (Maps 40+ intent enums; extracts material, quantity, unit, geo, PO, phase, cell)
+    ↓
+3. CONVERSATION CONTEXT RESOLVER (Resolves multi-turn pronouns & what-if variations)
+    ↓
+4. MULTI-TENANT AUTHORIZER (Enforces strict tenant isolation on user_id & upload_id)
+    ↓
+5. DATA SOURCE RETRIEVER (Priority: Cell → Row → Sheet → Calc → Record → Document → Factor)
+    ↓
+6. DETERMINISTIC TOOL EXECUTION (Math engine, factor library, freight logistics, regional grid factors)
+    ↓
+7. EVIDENCE & PROVENANCE BUILDER (Constructs verifiable audit payload)
+    ↓
+8. ADAPTIVE NATURAL ANSWER GENERATOR (Dynamic phrasing in user's detected language)
+    ↓
+STRUCTURED RESPONSE PAYLOAD:
+{
+  "answer": "...",
+  "grounded": true,
+  "language": "hinglish",
+  "intent": "MATERIAL_EMISSION",
+  "evidence": [...],
+  "suggestions": [...]
+}
 ```
 
 ---
 
-## 2. Question Library Summary
+## 3. Central Context Object (`CopilotContext`)
 
-The AI Copilot is validated against 14 analytical categories in [`CARBONLEDGER_AI_QUESTION_LIBRARY.md`](./CARBONLEDGER_AI_QUESTION_LIBRARY.md):
+Every user interaction is resolved against a structured context object:
 
-| Category | Domain | Core Questions Answered |
-|---|---|---|
-| **A** | **Document Understanding** | Extracted line items, detected document types, OCR confidence scores, page references. |
-| **B** | **Material Carbon Emissions** | Material footprint, activity quantities, factor lookups, step-by-step calculation proofs. |
-| **C** | **Fuel and Scope 1** | Direct stationary combustion, mobile fleet fuels, diesel volume conversions. |
-| **D** | **Electricity and Scope 2** | Location-based vs. market-based grid factors, regional compatibility, zero silent substitution. |
-| **E** | **Transportation & Logistics** | Freight cargo weight, distance, tonne-km formula, Scope 3 Cat 4 freight. |
-| **F** | **Unit Conversion** | Mass ($\text{kg} \leftrightarrow \text{t}$), Energy ($\text{kWh} \leftrightarrow \text{MWh}$), Volume-to-density conversions. |
-| **G** | **Emission Factors** | Provenance databases (DEFRA, EPA, Ecoinvent, CBAM), versioning, geography. |
-| **H** | **Scope Classification** | Boundary rationale distinguishing factual data from methodological interpretations. |
-| **I** | **Validation and Review** | Anomaly outliers, missing mandatory fields, low match confidence, duplicate flags. |
-| **J** | **Calculation Explanation** | $Activity \times Unit\ Conversion \times Factor = CO_2e$. |
-| **K** | **Dashboard Questions** | Total inventory footprint, Scope breakdowns, top emitting suppliers and materials. |
-| **L** | **Report Questions** | Multi-sheet structure (all 11 sheets), column definitions, CBAM declarations. |
-| **M** | **Report-Specific Context** | "What is this?", "Why is this number here?", cell and row inspector. |
-| **N** | **Troubleshooting** | OCR parsing failures, unmapped materials, zero-emission diagnoses. |
-
----
-
-## 3. Available AI Context Hierarchy
-
-The Copilot dynamically assembles context across 7 levels:
-
-```
-Tenant & Workspace Identity
-   └── Upload Session (Filename, Pages, Confidence)
-        ├── Extracted Line Items (Raw OCR tokens)
-        ├── Approved Calculation Results (Factor ID, Formula, CO2e)
-        ├── Compliance Reports (report_context.json)
-        │    ├── Active Sheet (Executive Summary, Scope 1/2/3, CBAM, Audit Trail)
-        │    └── Focused Row & Cell (Selected coordinate, Metric, PO)
-        └── Session Conversation Memory (Multi-turn follow-up history)
+```python
+class CopilotContext:
+    user_id: Optional[int]
+    workspace_id: str
+    conversation_id: str
+    upload_id: Optional[str]
+    language: str  # "english" | "hindi" | "hinglish"
+    previous_messages: List[Dict[str, Any]]
+    current_document_id: Optional[str]
+    current_document_name: Optional[str]
+    current_record_id: Optional[str]
+    current_report_id: Optional[str]
+    current_report_name: Optional[str]
+    current_sheet_name: Optional[str]
+    selected_cell: Optional[Dict[str, Any]]
+    selected_row: Optional[Dict[str, Any]]
+    selected_column: Optional[str]
+    dashboard_context: Dict[str, Any]
+    active_filters: Dict[str, Any]
+    simple_mode: bool
 ```
 
 ---
 
-## 4. Document Context
+## 4. Multilingual & Natural Phrasing Engine
 
-When a user uploads a document (PDF, Excel, JSON), the following context is parsed and made available:
-- `document_id` & `upload_id`: Unique cryptographic session tokens.
-- `filename`: Original document name.
-- `document_type`: Classified invoice, purchase order, bill of lading, or utility bill.
-- `pages_count`: Number of processed pages.
-- `ocr_confidence_pct`: Optical character recognition confidence.
-- `extracted_records`: Raw tokens, bounding boxes, and detected tables.
+The copilot respects the user's natural conversational style:
 
----
+### English:
+- **Query:** *"How much carbon does 500 kg of steel produce?"*
+- **Response:** Direct calculation trace with factor ID, source database, formula, and deterministic CO₂e result.
 
-## 5. Calculation Context
+### Hindi (Devanagari):
+- **Query:** *"मेरा कुल कार्बन फुटप्रिंट कितना है?"*
+- **Response:** *"डैशबोर्ड के अनुसार आपका कुल कार्बन फुटप्रिंट 31,461.77 kg CO₂e (31.462 tonnes) है..."*
 
-Every calculated line item contains full mathematical provenance:
-- `record_id`: Database primary key.
-- `po_number`: Extracted purchase order or invoice identifier.
-- `material`: Original raw material string and normalized matched alias.
-- `quantity` & `unit`: Activity volume.
-- `normalized_quantity` & `factor_unit`: Normalized denominator for factor product.
-- `emission_factor`: Numerical coefficient.
-- `co2e_kg`: Carbon dioxide equivalent footprint ($1\text{ t} = 1,000\text{ kg}$).
-- `formula`: Exact arithmetic string (e.g. `0.50 tonne * 1890.00 kgCO2e/t = 945.00 kgCO2e`).
-- `trace_json`: 5-step lifecycle trace log.
+### Hinglish (Conversational Romanized Hindi):
+- **Query:** *"Steel sheet ka emission kaise calculate hua?"*
+- **Response:** *"500 kg Steel Sheet ka emission calculate karne ke liye quantity ko compatible factor se multiply kiya gaya hai. Formula: 500 kg × 2.861 = 1,430.79 kg CO₂e."*
 
 ---
 
-## 6. Emission Factor Context
+## 5. Complete Deterministic Tool Registry (30+ Tools)
 
-Emission factors are sourced from the centralized `EmissionFactorService` (singleton loaded from `master_factors_cleaned.csv` containing 8,740+ factors):
-- `factor_id`: Unique identifier (e.g., `DEFRA_STEEL_2026`).
-- `factor_source`: Dataset authority (DEFRA, EPA GHG Hub, Ecoinvent 3.10, EU CBAM Defaults).
-- `factor_version`: Release version / year (2026).
-- `region`: Geographic applicability (DE, EU-27, US, Global RoW).
-- `confidence`: Semantic matching confidence score ($\ge 95\%$ for automated pass).
-
----
-
-## 7. Dashboard Context
-
-On the Dashboard tab, the Copilot aggregates:
-- `total_co2e_kg` & `total_co2e_tonnes`: Organization-wide carbon inventory.
-- `scope_1_kg`, `scope_2_kg`, `scope_3_kg`: Protocol breakdown percentages.
-- `top_suppliers`: Ranked list of vendor entities by emissions.
-- `top_materials`: Ranked list of procured commodities by carbon intensity.
-- `cbam_cost_eur`: Total carbon tariff liability at $€85/\text{tonne}$.
+| Category | Function | Description |
+| :--- | :--- | :--- |
+| **Documents** | `get_documents`, `search_documents`, `get_document_details` | Retrieves upload sessions, pages, composite OCR confidence, and company identifiers (`TechManufacturing India Ltd`, `CL-TCH-001`). |
+| **Materials** | `search_activity_records`, `get_material_records`, `calculate_material_emission` | Looks up materials, quantities, factors, and executes deterministic multiplication ($Q \times EF$). |
+| **Vendors & POs** | `get_supplier_records`, `get_invoice_records`, `get_purchase_order_records` | Maps vendor emissions, PO numbers, and line items. |
+| **Freight** | `get_transport_records`, `calculate_transport_emission` | Tonne-km freight calculations (Mumbai $\rightarrow$ Pune $\rightarrow$ Bangalore) with heavy-goods vehicle or electric truck factors. |
+| **Scope 1 Fuels** | `get_fuel_records`, `calculate_fuel_emission` | Stationary diesel generator, natural gas, and boiler combustion calculations. |
+| **Scope 2 Grids** | `get_electricity_records`, `calculate_electricity_emission` | Regional grid calculations (Maharashtra, Karnataka, Telangana, Germany grid factors). |
+| **Factors & Units** | `get_emission_factor`, `compare_emission_factors`, `convert_unit`, `validate_unit_compatibility` | Central factor library lookup, source provenance (DEFRA, EPA, Ecoinvent, CBAM), unit conversions. |
+| **Scopes** | `get_scope_breakdown`, `get_validation_issues`, `get_calculation_provenance` | Scope 1/2/3 categorization rationale and audit trail validation. |
+| **Dashboard** | `get_dashboard_metrics`, `get_top_emitters` | Live KPI totals, scope distribution, and emitter rankings. |
+| **Reports** | `get_report_list`, `get_report_summary`, `get_report_sheet`, `get_report_cell`, `trace_report_value` | Full multi-sheet inspector (Executive Summary, CBAM, Top Emitters, Audit Trail) and cell-level drilldown. |
+| **Intelligence** | `find_possible_duplicates`, `reconcile_dashboard_and_report` | Double-counting detection (Invoice vs PO, Utility vs Grid) and dashboard-to-report reconciliation. |
 
 ---
 
-## 8. Report Context
+## 6. Double-Counting Prevention Engine
 
-Generated reports produce a machine-readable index `report_context.json` alongside `.xlsx`, `.pdf`, and `.json` artifacts:
-- `report_id`: Unique report identifier (e.g. `RPT-upload_8a9f-4B219E81`).
-- `sheets`: Structured index of all 11 sheets.
-- `summary`: High-level metrics mirror.
-- `total_records_count`: Number of underlying transactions.
-
----
-
-## 9. Sheet Context
-
-The Copilot recognizes the active sheet opened in the Report Explorer:
-1. `Executive Summary`: High-level executive ESG metrics and pass rates.
-2. `Document Summary`: Intake metadata and extraction accuracy.
-3. `Materials`: Commodity volume and intensity tables.
-4. `Emission Summary`: Scope 1, 2, and 3 distribution.
-5. `Scope 1`: Direct stationary and mobile combustion.
-6. `Scope 2`: Location-based grid electricity.
-7. `Scope 3`: Supply chain goods (Cat 1) and freight transport (Cat 4).
-8. `CBAM Cost`: Certificate price calculations ($€85/\text{t}$).
-9. `Top Emitters`: Supplier and material rankings.
-10. `Recommendations`: Strategic reduction pathways.
-11. `Audit Trail`: Immutable timestamped logs with SHA-256 verification.
+When analyzing multi-phase documents (e.g. `deepseek_html_20260731_54ad15 (1).pdf` with 30 transactions across 10 phases), the Copilot identifies potential duplicate activities:
+1. **Invoice vs. Purchase Order**: Highlights identical material-quantity pairs across purchase orders and payment invoices.
+2. **Utility Bills vs. Grid Meters**: Identifies overlapping Scope 2 kWh electricity records between facility utility invoices and state-level grid logs.
+3. **Stationary Fuel vs. Transport Freight**: Distinguishes on-site generator diesel from logistics fleet transport fuel.
+4. **Purchased Materials vs. Shop-Floor Consumption**: Reconciles raw material intake with manufacturing batch logs.
 
 ---
 
-## 10. Selected Row & Cell Context
+## 7. Report Cell Inspector Specification
 
-When an auditor clicks a cell or row in the **Report Explorer** or **Review Table**, the Copilot receives:
+When a user clicks any cell in the Reports tab, the frontend dispatches a structured inspection payload:
+
 ```json
 {
-  "page": "Reports",
-  "sheet_name": "Scope 3",
-  "selected_cell": {
-    "column": "co2e_kg",
-    "value": 945.0,
-    "row_data": {
-      "po_number": "PO-9001",
-      "material": "Hot Rolled Steel",
-      "supplier": "SteelCorp Global",
-      "quantity": 500.0,
-      "unit": "kg",
-      "emission_factor": 1.89,
-      "factor_id": "DEFRA_STEEL_2026",
-      "formula": "0.50 tonne * 1890.00 kgCO2e/t = 945.00 kgCO2e"
-    }
+  "report_id": "RPT-upload_b8fb83eb-2026",
+  "sheet_name": "Executive Summary",
+  "cell_reference": "B12",
+  "column": "total_co2e_kg",
+  "display_value": "1,430.79 kg CO2e",
+  "row_data": {
+    "material": "Steel Sheet",
+    "po_number": "PO-2025-001",
+    "quantity": 500.0,
+    "unit": "kg",
+    "emission_factor": 2.861,
+    "factor_id": "DEFRA_STEEL_2026",
+    "formula": "500 kg * 2.861 kgCO2e/kg = 1430.79 kgCO2e"
   }
 }
 ```
-The Copilot traces the exact cell value back to its line item origin.
+
+The Copilot instantly explains the exact provenance, formula, and source document transaction behind that cell.
 
 ---
 
-## 11. Retrieval Architecture
+## 8. Anti-Hallucination Policy
 
-Context is selectively queried using indexed SQLite tables and session caches rather than dumping entire databases into LLM context windows:
-1. Tenant token authentication resolves `user_id` and active `upload_id`.
-2. Question classifier identifies required context scope (Record, Document, Factor, Report).
-3. Retrieval queries filter by `user_id = ? AND upload_id = ?`.
-4. Only relevant rows/metrics are passed to the answer synthesizer.
-
----
-
-## 12. Deterministic Calculation Tools
-
-The Copilot uses `CarbonCalculationService` for arithmetic:
-- Mass conversion: $Q_{\text{t}} = Q_{\text{kg}} \div 1000$.
-- Electricity conversion: $Q_{\text{MWh}} = Q_{\text{kWh}} \div 1000$.
-- Transport intensity: $T = Mass_{\text{t}} \times Distance_{\text{km}} \times Factor$.
-- Footprint product: $CO_2e = Q_{\text{normalized}} \times Factor$.
-
-Mental LLM arithmetic approximations are strictly forbidden.
-
----
-
-## 13. Report Data Tools
-
-The Copilot uses `ReportGeneratorService.get_report_context()` to inspect generated report schemas, column types, row counts, and formula strings.
-
----
-
-## 14. Security & Multi-Tenant Isolation
-
-- All endpoints enforce JWT bearer authentication or session user tokens.
-- SQL queries bind parameterized `WHERE user_id = ?`.
-- User A cannot query or view documents, factors, or reports belonging to User B.
-- Role-Based Access Control (RBAC) verifies permissions for downloads and audit logs.
-
----
-
-## 15. Strict Anti-Hallucination Guardrails
-
-- **Zero-Guessing Rule**: If an emission factor does not exist in the verified database, the Copilot explicitly states:
-  > *"CarbonLedger does not currently have a verified emission factor for '[Material]' in the loaded emission factor library. I cannot calculate or guess a CO2e value without an approved factor."*
-- **No Fabricated Documents/Baselines**: Asking for years with no data (e.g., 2018) returns an explicit "Historical data unavailable" response.
-- **Explicit Known vs. Inferred**: Verbatim document fields are distinguished from normalized values.
-
----
-
-## 16. Dynamic Suggested Questions System
-
-The Copilot returns page-specific suggested question pills:
-- **Intake**: *"What carbon data was extracted?", "Which materials were found?", "What does the OCR confidence score mean?"*
-- **Review**: *"Why is this record marked Review Required?", "Which factor will be assigned to steel?", "Are there duplicate records?"*
-- **Dashboard**: *"What is my total footprint?", "Which supplier has highest emissions?", "Explain Scope 1/2/3."*
-- **Reports**: *"Explain this sheet", "Where did this number come from?", "How is CBAM cost calculated?"*
-
----
-
-## 17. Test Suite Validation
-
-Automated tests in [`tests/test_ai_copilot.py`](file:///c:/Users/Aniket%20Singh/OneDrive/Documents/GitHub/Carbonledger/tests/test_ai_copilot.py) validate:
-1. Document understanding
-2. Deterministic material carbon calculations
-3. Emission factor provenance
-4. Scope 1 fuel breakdowns
-5. Scope 2 electricity grid calculations
-6. Transport logistics (tonne-km)
-7. Mathematical unit conversions
-8. Scope classification boundaries
-9. Validation & review flags
-10. Calculation formulas
-11. Dashboard totals
-12. Top supplier rankings
-13. Report multi-sheet indexing
-14. Sheet-specific inquiries
-15. Selected cell inspection
-16. Simple language mode
-17. Multi-turn follow-up queries
-18. Anti-hallucination unknown material checks
-19. Anti-hallucination historical year checks
-20. Dynamic suggestions generation
-
----
-
-## 18. Example Copilot Conversations
-
-### Example 1: Material Calculation with Factor Provenance
-> **User:** "How much CO2e does 500 kg of steel produce?"  
-> **Copilot:**  
-> ### Calculation & Data Provenance: Steel
-> - **Material**: Steel Sheet (Hot Rolled)
-> - **Activity Quantity**: 500.00 kg (0.50 metric tonnes)
-> - **Matched Emission Factor**: 1.8900 kg CO₂e/kg (ID: `DEFRA_STEEL_2026`)
-> - **Factor Source**: DEFRA GHG Conversion Factors 2026
-> - **Calculation Formula**: `500.0 kg × 1.89 kg CO₂e/kg = 945.00 kg CO₂e`
-> - **Result**: **945.00 kg CO₂e** (0.945 tonnes CO₂e)
-> - **Audit Verification**: Deterministic Engine Verified (Zero Approximation)
-
-### Example 2: Multi-turn Follow-up
-> **User:** "What if it was 2 tonnes?"  
-> **Copilot:**  
-> ### Calculation & Data Provenance: Steel
-> - **Material**: Steel Sheet (Hot Rolled)
-> - **Activity Quantity**: 2.00 metric tonnes (2,000.00 kg)
-> - **Matched Emission Factor**: 1.8900 kg CO₂e/kg
-> - **Calculation Formula**: `2000.0 kg × 1.89 kg CO₂e/kg = 3,780.00 kg CO₂e`
-> - **Result**: **3,780.00 kg CO₂e** (3.780 tonnes CO₂e)
-
-### Example 3: Anti-Hallucination for Unknown Material
-> **User:** "What is the carbon emission of 500 kg of Vibranium?"  
-> **Copilot:**  
-> I can confirm the requested activity is **500.0 kg of 'Vibranium'**. However, CarbonLedger does not currently have a verified emission factor for **'Vibranium'** in the loaded emission factor library (DEFRA/EPA/Ecoinvent).  
-> **Zero-Hallucination Policy:** I cannot guess or fabricate a CO₂e value without an approved factor. Please add a custom factor in Admin Console or assign a supplier-specific factor in Review.
+1. **Unknown Materials**: Refuses to estimate emissions for imaginary materials (*"Vibranium"*, *"Unobtainium"*); returns a clear explanation that an approved factor is required.
+2. **Missing Historical Years**: When queried for years not in the active ledger (e.g. *2018*), explains that the active inventory reflects reporting year *2026*.
+3. **Deterministic Arithmetic**: Never delegates calculations to the LLM; all arithmetic is performed by `CalculationEngine` and `CarbonCalculationService`.

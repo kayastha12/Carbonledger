@@ -383,12 +383,20 @@ def chat_copilot(payload: ChatQuerySchema, request: Request, auth_data: tuple = 
         current_user = get_current_user_from_req(request)
     except Exception:
         current_user = {"id": 1}
-    reply = copilot_engine.copilot_chat(
+    structured_res = copilot_engine.copilot_chat_structured(
         query=payload.query,
         user_id=current_user.get("id"),
         context_data=payload.context
     )
-    return {"response": reply, "answer": reply}
+    return {
+        "response": structured_res.get("answer", ""),
+        "answer": structured_res.get("answer", ""),
+        "grounded": structured_res.get("grounded", True),
+        "language": structured_res.get("language", "english"),
+        "intent": structured_res.get("intent", ""),
+        "evidence": structured_res.get("evidence", []),
+        "suggestions": structured_res.get("suggestions", [])
+    }
 
 @app.get("/api/v1/copilot/suggestions")
 def get_copilot_suggestions(page: Optional[str] = "Dashboard", sheet: Optional[str] = None):
@@ -682,15 +690,21 @@ def api_rag(payload: RAGRequest, request: Request):
     except Exception:
         current_user = {"id": 1}
     # Query copilot engine using the tenant's real calculated emissions data with context
-    reply = copilot_engine.copilot_chat(
+    structured_res = copilot_engine.copilot_chat_structured(
         query=payload.query,
         user_id=current_user.get("id"),
         context_data=payload.context
     )
+    reply = structured_res.get("answer", "")
     return {
         "answer": reply,
         "response": reply,
         "query": payload.query,
+        "grounded": structured_res.get("grounded", True),
+        "language": structured_res.get("language", "english"),
+        "intent": structured_res.get("intent", ""),
+        "evidence": structured_res.get("evidence", []),
+        "suggestions": structured_res.get("suggestions", []),
         "citations": ["CarbonLedger Internal Verified Ledger"]
     }
 
