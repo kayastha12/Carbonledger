@@ -237,7 +237,9 @@ db_inventory = [
 
 class ChatQuerySchema(BaseModel):
     query: str
-    tenant_id: str
+    tenant_id: Optional[str] = "default"
+    context: Optional[dict] = None
+    simple_mode: Optional[bool] = False
 
 class FeedbackSchema(BaseModel):
     raw_input: str
@@ -375,11 +377,39 @@ def execute_mcp_tool(payload: MCPCallSchema):
 
 # 7. AI COPILOT CHAT
 @app.post("/api/v1/chat")
-def chat_copilot(payload: ChatQuerySchema, auth_data: tuple = Depends(get_current_tenant_and_role)):
+def chat_copilot(payload: ChatQuerySchema, request: Request, auth_data: tuple = Depends(get_current_tenant_and_role)):
     tenant_id, role = auth_data
-    # Everyone gets access to chat copilot
-    reply = copilot_engine.copilot_chat(payload.query)
-    return {"response": reply}
+    try:
+        current_user = get_current_user_from_req(request)
+    except Exception:
+        current_user = {"id": 1}
+    reply = copilot_engine.copilot_chat(
+        query=payload.query,
+        user_id=current_user.get("id"),
+        context_data=payload.context
+    )
+    return {"response": reply, "answer": reply}
+
+@app.get("/api/v1/copilot/suggestions")
+def get_copilot_suggestions(page: Optional[str] = "Dashboard", sheet: Optional[str] = None):
+    ctx = {"sheet_name": sheet} if sheet else None
+    suggestions = copilot_engine.get_suggested_questions(page_name=page, context=ctx)
+    return {"suggestions": suggestions}
+
+@app.get("/api/v1/reports/context")
+def get_report_context_endpoint(upload_id: str, request: Request):
+    try:
+        current_user = get_current_user_from_req(request)
+    except Exception:
+        current_user = {"id": 1}
+    from services.report_generator_service import ReportGeneratorService
+    output_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "output", "reports")
+    rep_svc = ReportGeneratorService(output_dir)
+    ctx = rep_svc.get_report_context(upload_id)
+    if not ctx:
+        raise HTTPException(status_code=404, detail="Report context not found for this upload")
+    return ctx
+
 
 # 8. MULTI-DOCUMENT CARBON ACCOUNTING WORKSPACE
 @app.post("/api/v1/documents/upload")
@@ -613,6 +643,8 @@ class MatchRequest(BaseModel):
 class RAGRequest(BaseModel):
     query: str
     tenant_id: Optional[str] = "default"
+    context: Optional[dict] = None
+    simple_mode: Optional[bool] = False
 
 class RecommendRequest(BaseModel):
     data: List[dict]
@@ -649,13 +681,17 @@ def api_rag(payload: RAGRequest, request: Request):
         current_user = get_current_user_from_req(request)
     except Exception:
         current_user = {"id": 1}
-    # Query copilot engine using the tenant's real calculated emissions data
-    reply = copilot_engine.copilot_chat(query=payload.query, user_id=current_user.get("id"))
+    # Query copilot engine using the tenant's real calculated emissions data with context
+    reply = copilot_engine.copilot_chat(
+        query=payload.query,
+        user_id=current_user.get("id"),
+        context_data=payload.context
+    )
     return {
         "answer": reply,
         "response": reply,
         "query": payload.query,
-        "citations": ["CarbonLedger Internal Ledger"]
+        "citations": ["CarbonLedger Internal Verified Ledger"]
     }
 
 @app.post("/api/recommend")

@@ -93,12 +93,16 @@ class ReportGeneratorService:
         # 5. Executive ESG Report PDF
         esg_path = self._generate_executive_esg_pdf(upload_dir, sections)
 
+        # 6. Report Context Index (Machine-readable for AI Copilot)
+        context_path = self._generate_report_context_json(upload_dir, df, sections, report_id, timestamp, upload_id)
+
         return {
             "carbon_report_pdf": f"/api/reports/download?path={pdf_path}",
             "cbam_report_excel": f"/api/reports/download?path={cbam_path}",
             "inventory_excel": f"/api/reports/download?path={inventory_path}",
             "audit_json": f"/api/reports/download?path={audit_path}",
-            "executive_esg_pdf": f"/api/reports/download?path={esg_path}"
+            "executive_esg_pdf": f"/api/reports/download?path={esg_path}",
+            "report_context_json": f"/api/reports/download?path={context_path}"
         }
 
     # ---------------------------------------------------------------
@@ -834,3 +838,123 @@ class ReportGeneratorService:
             pdf.set_font("helvetica", "I", 8)
             pdf.cell(0, 5, text=f"    ... and {len(records) - 15} more rows (see Excel for full detail)", new_x="LMARGIN", new_y="NEXT")
         pdf.ln(4)
+
+    # ---------------------------------------------------------------
+    # REPORT 6: MACHINE-READABLE REPORT CONTEXT INDEX FOR AI COPILOT
+    # ---------------------------------------------------------------
+    def _generate_report_context_json(self, upload_dir: str, df: pd.DataFrame, sections: Dict,
+                                     report_id: str, timestamp: str, upload_id: str) -> str:
+        """
+        Creates a structured, machine-readable JSON index of all sheets, columns,
+        tables, formulas, rows, and cell values in the generated report.
+        """
+        path = os.path.join(upload_dir, "report_context.json")
+
+        sheets = [
+            {
+                "name": "Executive Summary",
+                "description": "High-level summary of total carbon emissions, CBAM exposure, confidence scores, and calculated row counts.",
+                "type": "key_value_metrics",
+                "metrics": sections.get("executive_summary", {})
+            },
+            {
+                "name": "Document Summary",
+                "description": "Metadata regarding parsed documents, extraction confidence, and OCR matching rates.",
+                "type": "key_value_metrics",
+                "metrics": sections.get("document_summary", {})
+            },
+            {
+                "name": "Materials",
+                "description": "Aggregated emissions, quantities, CBAM cost, and row counts grouped by procured material.",
+                "type": "table",
+                "columns": ["material", "co2e_kg", "quantity", "cbam_cost_eur", "count"],
+                "rows": sections.get("materials", [])
+            },
+            {
+                "name": "Emission Summary",
+                "description": "Total carbon footprint broken down by GHG Protocol Scope 1, Scope 2, and Scope 3.",
+                "type": "key_value_metrics",
+                "metrics": sections.get("emission_summary", {})
+            },
+            {
+                "name": "Scope 1",
+                "description": "Direct fuel combustion, mobile fleet, and on-site process emissions.",
+                "type": "table",
+                "columns": ["material", "supplier", "quantity", "unit", "factor_id", "emission_factor", "formula", "co2e_kg", "cbam_cost_eur", "calculation_status"],
+                "total_kg": sections.get("scope_1", {}).get("total_kg", 0.0),
+                "rows_count": sections.get("scope_1", {}).get("rows_count", 0),
+                "records": sections.get("scope_1", {}).get("records", [])
+            },
+            {
+                "name": "Scope 2",
+                "description": "Indirect emissions from purchased electricity, steam, and utility heating.",
+                "type": "table",
+                "columns": ["material", "supplier", "quantity", "unit", "factor_id", "emission_factor", "formula", "co2e_kg", "cbam_cost_eur", "calculation_status"],
+                "total_kg": sections.get("scope_2", {}).get("total_kg", 0.0),
+                "rows_count": sections.get("scope_2", {}).get("rows_count", 0),
+                "records": sections.get("scope_2", {}).get("records", [])
+            },
+            {
+                "name": "Scope 3",
+                "description": "Upstream supply chain purchases, raw materials, freight logistics, and outsourced processing.",
+                "type": "table",
+                "columns": ["material", "supplier", "quantity", "unit", "factor_id", "emission_factor", "formula", "co2e_kg", "cbam_cost_eur", "calculation_status"],
+                "total_kg": sections.get("scope_3", {}).get("total_kg", 0.0),
+                "rows_count": sections.get("scope_3", {}).get("rows_count", 0),
+                "records": sections.get("scope_3", {}).get("records", [])
+            },
+            {
+                "name": "CBAM Cost",
+                "description": "Official EU Carbon Border Adjustment Mechanism (CBAM) embedded emissions and certificate cost liability calculation.",
+                "type": "calculation_summary",
+                "metrics": sections.get("cbam_cost", {})
+            },
+            {
+                "name": "Top Emitters",
+                "description": "Ranking of top carbon-emitting materials and suppliers.",
+                "type": "rankings",
+                "by_material": sections.get("top_emitters", {}).get("by_material", []),
+                "by_supplier": sections.get("top_emitters", {}).get("by_supplier", [])
+            },
+            {
+                "name": "Recommendations",
+                "description": "AI-suggested decarbonization pathways and audit remediation actions.",
+                "type": "list",
+                "items": sections.get("recommendations", [])
+            },
+            {
+                "name": "Audit Trail",
+                "description": "Cryptographic compliance logs, validation scores, and factor matching audits.",
+                "type": "audit",
+                "report_id": report_id,
+                "timestamp": timestamp,
+                "validation_scores": sections.get("validation_scores", {})
+            }
+        ]
+
+        report_context = {
+            "report_id": report_id,
+            "upload_id": upload_id,
+            "timestamp": timestamp,
+            "summary": sections.get("executive_summary", {}),
+            "sheets": sheets,
+            "total_records_count": len(df),
+            "raw_records_sample": df.head(50).to_dict("records") if len(df) > 0 else []
+        }
+
+        with open(path, "w", encoding="utf-8") as f:
+            json.dump(report_context, f, indent=2, default=str)
+
+        return path
+
+    def get_report_context(self, upload_id: str) -> Optional[Dict[str, Any]]:
+        """Retrieves structured report context JSON for an upload session."""
+        path = os.path.join(self.output_dir, "uploads", upload_id, "report_context.json")
+        if os.path.exists(path):
+            try:
+                with open(path, "r", encoding="utf-8") as f:
+                    return json.load(f)
+            except Exception:
+                pass
+        return None
+
