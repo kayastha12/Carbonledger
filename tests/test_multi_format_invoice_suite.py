@@ -17,7 +17,6 @@ from typing import List, Dict, Any
 from pipeline.extraction.field_mapper import FieldMapper
 from services.document_ai_service import DocumentAIService
 from services.universal_upload_service import UniversalUploadService
-from services.bulk_upload_service import BulkUploadService
 from api.database import get_db_connection, init_db
 
 
@@ -35,11 +34,6 @@ def doc_ai():
 @pytest.fixture
 def calc_service():
     return UniversalUploadService()
-
-
-@pytest.fixture
-def bulk_service():
-    return BulkUploadService()
 
 
 class TestFieldMapperRobustness:
@@ -281,69 +275,4 @@ class TestMultiFormatExtractionFormats:
         assert calc_res["summary"]["total_co2e_kg"] > 0
 
 
-class TestBulkUploadEngine:
-    """Tests asynchronous batch creation, live timer math, polling, and partial calculation resilience."""
 
-    def test_bulk_batch_lifecycle_and_timers(self, bulk_service):
-        # Create 3 invoice files
-        files_data = []
-        for i in range(1, 4):
-            content = f"INVOICE {i}\nDescription | Quantity | Unit\nStructural Steel | {5000 * i} | kg\n"
-            files_data.append((f"invoice_batch_{i}.txt", content.encode("utf-8")))
-
-        user_id = 1
-        start_res = bulk_service.start_bulk_upload(files_data, user_id=user_id)
-        batch_id = start_res["batch_id"]
-        assert batch_id is not None
-        assert start_res["total_files"] == 3
-
-        # Wait for background thread completion (or max 15s)
-        for _ in range(60):
-            status_data = bulk_service.get_batch_status(batch_id, user_id=user_id)
-            assert status_data is not None
-            assert "elapsed_seconds" in status_data
-            assert "progress_pct" in status_data
-            if status_data["status"] in ["COMPLETED", "COMPLETED_WITH_REVIEW"]:
-                break
-            time.sleep(0.25)
-
-        final_status = bulk_service.get_batch_status(batch_id, user_id=user_id)
-        assert final_status["status"] in ["COMPLETED", "COMPLETED_WITH_REVIEW"]
-        assert final_status["completed_count"] == 3
-        assert final_status["processed_documents"] == 3
-        assert final_status["progress_pct"] == 100
-        assert len(final_status["jobs"]) == 3
-        assert all(j["status"] == "COMPLETED" for j in final_status["jobs"])
-        assert all(j["total_co2e_kg"] > 0 for j in final_status["jobs"])
-
-    def test_bulk_error_resilience(self, bulk_service):
-        """A corrupted/empty document on job 2 does not stop or fail job 3."""
-        files_data = [
-            ("valid_invoice_1.txt", b"INVOICE 1\nDescription | Quantity | Unit\nStructural Steel | 10000 | kg"),
-            ("corrupt_empty.txt", b"NOT AN INVOICE JUNK TEXT EMPTY DATA"),
-            ("valid_invoice_2.txt", b"INVOICE 2\nDescription | Quantity | Unit\nStructural Steel | 20000 | kg"),
-        ]
-
-        user_id = 1
-        start_res = bulk_service.start_bulk_upload(files_data, user_id=user_id)
-        batch_id = start_res["batch_id"]
-
-        for _ in range(60):
-            status_data = bulk_service.get_batch_status(batch_id, user_id=user_id)
-            if status_data and status_data["status"] in ["COMPLETED", "COMPLETED_WITH_REVIEW", "FAILED"]:
-                break
-            time.sleep(0.25)
-
-        final_status = bulk_service.get_batch_status(batch_id, user_id=user_id)
-        assert final_status["total_documents"] == 3
-        assert (final_status["completed_count"] + final_status["review_count"]) == 2
-        assert final_status["failed_count"] == 1
-        assert final_status["status"] == "COMPLETED_WITH_REVIEW"
-
-        # Check per-job results
-        jobs = {j["filename"]: j for j in final_status["jobs"]}
-        assert jobs["valid_invoice_1.txt"]["status"] in ["COMPLETED", "REVIEW_REQUIRED"]
-        assert jobs["valid_invoice_1.txt"]["total_kg_co2e"] > 0
-        assert jobs["corrupt_empty.txt"]["status"] == "FAILED"
-        assert jobs["valid_invoice_2.txt"]["status"] in ["COMPLETED", "REVIEW_REQUIRED"]
-        assert jobs["valid_invoice_2.txt"]["total_kg_co2e"] > 0

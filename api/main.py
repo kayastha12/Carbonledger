@@ -55,6 +55,14 @@ try:
 except Exception as e:
     print(f"[DB] Module load init exception: {e}")
 
+# Pre-warm authoritative GHG factors engine in memory to eliminate request-time Excel parsing
+try:
+    from services.workbook_factor_engine import WorkbookFactorEngine
+    _wfe = WorkbookFactorEngine.get_instance()
+    print(f"[Engine] Pre-warmed WorkbookFactorEngine with {len(_wfe.factors_by_id)} emission factors in memory.")
+except Exception as e:
+    print(f"[Engine] Factor pre-warm notice: {e}")
+
 # Phase 8 – CBAM Report Service
 from services import cbam_report_service
 
@@ -802,19 +810,30 @@ async def api_upload_universal(file: Optional[UploadFile] = File(None), payload:
     if not file:
         raise HTTPException(status_code=400, detail="Either file or JSON payload is required")
         
+    t_upload_recv = time.perf_counter()
     project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     temp_dir = os.path.join(project_root, "output", "temp")
     os.makedirs(temp_dir, exist_ok=True)
     temp_path = os.path.join(temp_dir, file.filename)
     
+    t_save_start = time.perf_counter()
     with open(temp_path, "wb") as f:
         f.write(await file.read())
+    t_save_done = time.perf_counter()
+    file_save_sec = round(t_save_done - t_save_start, 4)
+    print(f"[Upload Performance] FILE_SAVE: {file_save_sec}s for '{file.filename}'")
         
     try:
+        t_parse_start = time.perf_counter()
         parsed_res = universal_service.parse_uploaded_file(temp_path, file.filename)
+        t_parse_done = time.perf_counter()
+        pdf_parse_sec = round(t_parse_done - t_parse_start, 4)
+        print(f"[Upload Performance] PDF_EXTRACTION: {pdf_parse_sec}s")
+
         extracted_records = parsed_res.get("records", [])
         upload_id = f"upload_{uuid.uuid4().hex[:8]}"
 
+        t_db_start = time.perf_counter()
         conn = get_db_connection()
         cursor = conn.cursor()
         cursor.execute("""
@@ -833,8 +852,14 @@ async def api_upload_universal(file: Optional[UploadFile] = File(None), payload:
         ))
         conn.commit()
         conn.close()
+        t_db_done = time.perf_counter()
+        db_sec = round(t_db_done - t_db_start, 4)
+        print(f"[Upload Performance] DATABASE: {db_sec}s")
 
         record_activity(current_user["id"], "DOCUMENT_UPLOAD", f"Uploaded and parsed document '{file.filename}' ({len(extracted_records)} items extracted).")
+
+        t_total_sec = round(time.perf_counter() - t_upload_recv, 4)
+        print(f"[Upload Performance Timing] doc_id={upload_id} | UPLOAD_RECEIVE: {round(t_save_start - t_upload_recv, 4)}s | FILE_SAVE: {file_save_sec}s | PDF_EXTRACTION: {pdf_parse_sec}s | DATABASE: {db_sec}s | TOTAL_UNTIL_REVIEW: {t_total_sec}s")
 
         return {
             "upload_id": upload_id,
@@ -847,6 +872,12 @@ async def api_upload_universal(file: Optional[UploadFile] = File(None), payload:
                 "pages_count": parsed_res.get("pages_count", 1),
                 "tables_count": parsed_res.get("tables_count", 0),
                 "validation_score": parsed_res.get("validation_score", 100.0)
+            },
+            "timings": {
+                "file_save_sec": file_save_sec,
+                "extraction_sec": pdf_parse_sec,
+                "database_sec": db_sec,
+                "total_sec": t_total_sec
             }
         }
     except Exception as e:
@@ -998,37 +1029,7 @@ def get_review_session(upload_id: str, request: Request = None):
     except Exception as e:
         raise HTTPException(status_code=400, detail=str(e))
 
-# ─── BULK INVOICE PROCESSING ENDPOINTS ──────────────────────────────────────
-@app.post("/api/upload/bulk")
-async def bulk_upload_invoices(
-    files: List[UploadFile] = File(...),
-    request: Request = None
-):
-    current_user = get_current_user_from_req(request) if request else {"id": 1}
-    if not files or len(files) == 0:
-        raise HTTPException(status_code=400, detail="No files provided for bulk processing")
 
-    from services.bulk_upload_service import BulkUploadService
-    bulk_service = BulkUploadService.get_instance()
-
-    file_tuples = []
-    for f in files:
-        content = await f.read()
-        file_tuples.append((f.filename, content))
-
-    batch_res = bulk_service.start_batch(user_id=current_user["id"], files=file_tuples)
-    return batch_res
-
-@app.get("/api/upload/batch/{batch_id}")
-def get_bulk_batch_status(batch_id: str, request: Request = None):
-    current_user = get_current_user_from_req(request) if request else {"id": 1}
-    from services.bulk_upload_service import BulkUploadService
-    bulk_service = BulkUploadService.get_instance()
-
-    status_data = bulk_service.get_batch_status(batch_id=batch_id, user_id=current_user["id"])
-    if not status_data:
-        raise HTTPException(status_code=404, detail="Batch processing job not found")
-    return status_data
 
 @app.post("/api/documents/upload")
 async def api_documents_upload(file: Optional[UploadFile] = File(None), payload: Optional[str] = Form(None), request: Request = None):

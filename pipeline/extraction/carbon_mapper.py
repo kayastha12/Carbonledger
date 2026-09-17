@@ -18,20 +18,25 @@ class CarbonMapper:
         self.facility_dir = {}   # plant_name.lower() -> {facility_id, location}
         self.product_dir = {}    # product_name.lower() -> {product_id, hs_code, cn_code, category}
 
-    def build_lookups_from_pdf(self, pdf_obj, parsed_doc) -> None:
+    def build_lookups_from_pdf(self, pdf_obj, parsed_doc, cached_pages: Optional[Dict[int, Dict[str, Any]]] = None) -> None:
         """
         Parses all tables across all pages in the PDF to populate lookup directories for data consistency.
         """
-        if not pdf_obj:
+        if not pdf_obj and not cached_pages:
             return
             
         # We scan all pages to find tables that belong to master data:
         # Phase 3 (Supplier Master), Phase 6 (Facility & Plant), Phase 10 (CBAM Product Mapping)
-        for page_idx, page in enumerate(pdf_obj.pages):
-            page_text = page.extract_text() or ""
+        pages_to_scan = []
+        if cached_pages:
+            for p_num in sorted(cached_pages.keys()):
+                pages_to_scan.append((cached_pages[p_num].get("text", ""), cached_pages[p_num].get("tables", [])))
+        elif pdf_obj:
+            for page in pdf_obj.pages:
+                pages_to_scan.append((page.extract_text() or "", page.extract_tables() or []))
+
+        for page_text, tables in pages_to_scan:
             text_low = page_text.lower()
-            
-            tables = page.extract_tables() or []
             for t in tables:
                 if len(t) < 2 or len(t[0]) < 3:
                     continue

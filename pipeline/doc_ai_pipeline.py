@@ -38,7 +38,13 @@ def get_file_hash(filepath: str) -> str:
             buf = f.read(65536)
     return hasher.hexdigest()
 
+_TESSERACT_AVAILABLE = None
+
 def check_tesseract() -> bool:
+    global _TESSERACT_AVAILABLE
+    if _TESSERACT_AVAILABLE is not None:
+        return _TESSERACT_AVAILABLE
+
     # Look for common paths or use default path
     default_paths = [
         r"C:\Program Files\Tesseract-OCR\tesseract.exe",
@@ -46,14 +52,17 @@ def check_tesseract() -> bool:
     ]
     for path in default_paths:
         if os.path.exists(path):
+            _TESSERACT_AVAILABLE = True
             return True
     
     # Try running tesseract command
     try:
         import subprocess
         subprocess.run(["tesseract", "--version"], stdout=subprocess.PIPE, stderr=subprocess.PIPE, check=True)
+        _TESSERACT_AVAILABLE = True
         return True
     except Exception:
+        _TESSERACT_AVAILABLE = False
         return False
 
 def render_pdf_pages_to_dir(pdf_path: str, output_dir: str):

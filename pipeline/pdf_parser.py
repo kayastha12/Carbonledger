@@ -6,7 +6,7 @@ class PDFParser:
     def __init__(self, ocr_engine: BaseOCREngine = None):
         self.ocr_engine = ocr_engine
 
-    def parse_pdf(self, pdf_path: str, temp_image_dir: str = None) -> dict:
+    def parse_pdf(self, pdf_path: str, temp_image_dir: str = None, pdf_obj = None) -> dict:
         """
         Parses a PDF file. Extracts embedded text if available, 
         otherwise falls back to OCR on rendered pages.
@@ -17,36 +17,43 @@ class PDFParser:
         }
         
         has_embedded_text = False
-        
-        with pdfplumber.open(pdf_path) as pdf:
-            total_words = 0
-            for page in pdf.pages:
-                words = page.extract_words()
-                if words:
-                    total_words += len(words)
+        collected_pages = []
+        total_words = 0
+
+        # Helper to process an open pdfplumber object
+        def _process_pages(pdf):
+            nonlocal total_words, has_embedded_text, collected_pages
+            for page_idx, page in enumerate(pdf.pages):
+                page_num = page_idx + 1
+                words = page.extract_words() or []
+                total_words += len(words)
+                page_words = []
+                for w in words:
+                    page_words.append({
+                        "text": w["text"],
+                        "confidence": 1.0,
+                        "bbox": [float(w["x0"]), float(w["top"]), float(w["x1"]), float(w["bottom"])],
+                        "page": page_num
+                    })
+                full_text = " ".join([w["text"] for w in words])
+                collected_pages.append({
+                    "page_number": page_num,
+                    "text": full_text,
+                    "words": page_words,
+                    "source": "PDF_EMBEDDED_TEXT"
+                })
+            
             if total_words > 3 * len(pdf.pages):
                 has_embedded_text = True
+
+        if pdf_obj is not None:
+            _process_pages(pdf_obj)
+        else:
+            with pdfplumber.open(pdf_path) as pdf:
+                _process_pages(pdf)
                 
-            if has_embedded_text:
-                for page_idx, page in enumerate(pdf.pages):
-                    page_num = page_idx + 1
-                    words = page.extract_words() or []
-                    page_words = []
-                    for w in words:
-                        page_words.append({
-                            "text": w["text"],
-                            "confidence": 1.0,
-                            "bbox": [float(w["x0"]), float(w["top"]), float(w["x1"]), float(w["bottom"])],
-                            "page": page_num
-                        })
-                    
-                    full_text = " ".join([w["text"] for w in words])
-                    result["pages"].append({
-                        "page_number": page_num,
-                        "text": full_text,
-                        "words": page_words,
-                        "source": "PDF_EMBEDDED_TEXT"
-                    })
+        if has_embedded_text:
+            result["pages"] = collected_pages
         
         # If no embedded text, fallback to OCR
         if not has_embedded_text:

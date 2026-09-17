@@ -141,10 +141,11 @@ class DocumentAIService:
         file_size_bytes = os.path.getsize(file_path)
         file_hash = self.get_file_hash(file_path)
         doc_id = f"doc_{file_hash[:12]}"
-        print(f"[DocumentAI] UPLOAD: filename={f_name}, size={file_size_bytes} bytes")
-        logs.append(f"[DocumentAI] UPLOAD: filename={f_name}, size={file_size_bytes} bytes")
+        t_upload_recv = time.perf_counter()
+        print(f"[DocumentAI] UPLOAD_RECEIVE: filename={f_name}, size={file_size_bytes} bytes")
+        logs.append(f"[DocumentAI] UPLOAD_RECEIVE: filename={f_name}, size={file_size_bytes} bytes")
 
-        # Initialize OCR engine if Tesseract is installed
+        # Initialize OCR engine if Tesseract is installed and needed
         ocr_engine = None
         ocr_engine_name = "pdfplumber"
         if doc_ai_pipeline.check_tesseract():
@@ -154,85 +155,95 @@ class DocumentAIService:
                 logs.append(f"[DocumentAI] Tesseract OCR init notice: {e}")
                 ocr_engine = None
 
-        # Parse PDF structure
-        pdf_parser = PDFParser(ocr_engine)
-        parsed_doc = pdf_parser.parse_pdf(file_path)
         pdf_obj = pdfplumber.open(file_path)
+        try:
+            t_parse_start = time.perf_counter()
+            # Parse PDF structure using the already-open pdfplumber object
+            pdf_parser = PDFParser(ocr_engine)
+            parsed_doc = pdf_parser.parse_pdf(file_path, pdf_obj=pdf_obj)
 
-        for page in parsed_doc.get("pages", []):
-            if page.get("source") == "REAL_OCR":
-                ocr_engine_name = "tesseract"
+            # Pre-extract and cache text, words, and tables for each page in a single pass
+            cached_pages = {}
+            for page_idx, p_obj in enumerate(pdf_obj.pages):
+                p_num = page_idx + 1
+                cached_pages[p_num] = {
+                    "text": p_obj.extract_text() or "",
+                    "words": p_obj.extract_words() or [],
+                    "tables": p_obj.extract_tables() or []
+                }
+            t_parse_end = time.perf_counter()
+            print(f"[DocumentAI] PDF_PARSE: {round((t_parse_end - t_parse_start)*1000, 2)}ms")
 
-        pages_count = len(parsed_doc.get("pages", []))
-        pages_with_text = len([p for p in parsed_doc.get("pages", []) if p.get("text") and str(p.get("text")).strip()])
-        tables_count = 0
+            for page in parsed_doc.get("pages", []):
+                if page.get("source") == "REAL_OCR":
+                    ocr_engine_name = "tesseract"
 
-        print(f"[DocumentAI] PDF_OPEN: pages={pages_count}")
-        print(f"[DocumentAI] TEXT_EXTRACT: pages_with_text={pages_with_text}")
-        logs.append(f"[DocumentAI] PDF_OPEN: pages={pages_count}, TEXT_EXTRACT: pages_with_text={pages_with_text}")
+            pages_count = len(parsed_doc.get("pages", []))
+            pages_with_text = len([p for p in parsed_doc.get("pages", []) if p.get("text") and str(p.get("text")).strip()])
+            tables_count = sum(len(cp.get("tables", [])) for cp in cached_pages.values())
 
-        # Segment document
-        segmenter = DocumentSegmenter()
-        segments = segmenter.segment_document(parsed_doc)
-        print(f"[DocumentAI] SEGMENTATION: segments={len(segments)}")
-        logs.append(f"[DocumentAI] Segmented document into {len(segments)} logical segment(s).")
+            print(f"[DocumentAI] PDF_OPEN: pages={pages_count}")
+            print(f"[DocumentAI] TEXT_EXTRACT: pages_with_text={pages_with_text}, OCR_ENGINE={ocr_engine_name}")
+            logs.append(f"[DocumentAI] PDF_OPEN: pages={pages_count}, TEXT_EXTRACT: pages_with_text={pages_with_text}")
 
-        classifier = RuleBasedDocumentClassifier()
-        layout_analyzer = LayoutAnalyzer()
-        extractor = HeuristicExtractor()
-        validator = DocumentValidator()
+            # Segment document
+            t_seg_start = time.perf_counter()
+            segmenter = DocumentSegmenter()
+            segments = segmenter.segment_document(parsed_doc)
+            print(f"[DocumentAI] SEGMENTATION: segments={len(segments)} ({round((time.perf_counter() - t_seg_start)*1000, 2)}ms)")
+            logs.append(f"[DocumentAI] Segmented document into {len(segments)} logical segment(s).")
 
-        mapper = CarbonMapper()
-        mapper.build_lookups_from_pdf(pdf_obj, parsed_doc)
+            classifier = RuleBasedDocumentClassifier()
+            layout_analyzer = LayoutAnalyzer()
+            extractor = HeuristicExtractor()
+            validator = DocumentValidator()
 
-        flat_records = []
+            mapper = CarbonMapper()
+            mapper.build_lookups_from_pdf(pdf_obj, parsed_doc, cached_pages=cached_pages)
 
-        for seg in segments:
-            segment_type = seg.get("type", "UNKNOWN")
-            segment_key = seg.get("segment_id", "SEG_001")
-            seg_id = f"{doc_id}_{segment_key}"
-            seg_pages = seg.get("pages", [1])
+            flat_records = []
+            counted_tables = 0
 
-            # Skip pure summary segments
-            if segment_type in ["CBAM_PRODUCT_MAPPING", "FACILITY_PLANT", "SUPPLIER_MASTER"]:
-                # Check if there are actual consumption tables on these pages
-                pass
+            for seg in segments:
+                segment_type = seg.get("type", "UNKNOWN")
+                segment_key = seg.get("segment_id", "SEG_001")
+                seg_id = f"{doc_id}_{segment_key}"
+                seg_pages = seg.get("pages", [1])
 
-            sub_pages = [p for p in parsed_doc.get("pages", []) if p.get("page_number") in seg_pages]
-            sub_parsed = {
-                "file_name": f_name,
-                "pages": sub_pages
-            }
+                sub_pages = [p for p in parsed_doc.get("pages", []) if p.get("page_number") in seg_pages]
+                sub_parsed = {
+                    "file_name": f_name,
+                    "pages": sub_pages
+                }
 
-            cls_res = classifier.classify(sub_parsed)
-            cls_res.document_type = segment_type
+                cls_res = classifier.classify(sub_parsed)
+                cls_res.document_type = segment_type
 
-            use_table_parser = False
-            extracted_records = []
+                use_table_parser = False
+                extracted_records = []
 
-            for p_num in seg_pages:
-                if p_num <= len(pdf_obj.pages):
-                    p_obj = pdf_obj.pages[p_num - 1]
-                    p_words = p_obj.extract_words()
-                    tables = p_obj.extract_tables() or []
-                    page_text_for_context = p_obj.extract_text() or ""
-                    page_ctx = extract_page_context(page_text_for_context)
+                for p_num in seg_pages:
+                    if p_num in cached_pages:
+                        p_words = cached_pages[p_num]["words"]
+                        tables = cached_pages[p_num]["tables"]
+                        page_text_for_context = cached_pages[p_num]["text"]
+                        page_ctx = extract_page_context(page_text_for_context)
 
-                    for t in tables:
-                        if doc_ai_pipeline.is_valid_data_table(t, segment_type):
-                            use_table_parser = True
-                            tables_count += 1
-                            raw_headers = t[0]
-                            headers = []
-                            for h in raw_headers:
-                                if h is None:
-                                    headers.append("unknown")
-                                    continue
-                                h_clean = str(h).replace("\n", " ").lower().strip()
-                                canonical = FieldMapper.get_canonical_field(h_clean)
-                                if canonical == "unknown":
-                                    canonical = h_clean.replace(" ", "_")
-                                headers.append(canonical)
+                        for t in tables:
+                            if doc_ai_pipeline.is_valid_data_table(t, segment_type):
+                                use_table_parser = True
+                                counted_tables += 1
+                                raw_headers = t[0]
+                                headers = []
+                                for h in raw_headers:
+                                    if h is None:
+                                        headers.append("unknown")
+                                        continue
+                                    h_clean = str(h).replace("\n", " ").lower().strip()
+                                    canonical = FieldMapper.get_canonical_field(h_clean)
+                                    if canonical == "unknown":
+                                        canonical = h_clean.replace(" ", "_")
+                                    headers.append(canonical)
 
                             last_meta = {}
                             for row_idx, row in enumerate(t[1:]):
@@ -463,8 +474,12 @@ class DocumentAIService:
                     carbon_rec["company"]["company_id"] = real_comp_id
 
                 flat_records.append(carbon_rec)
-
-        pdf_obj.close()
+        finally:
+            if pdf_obj:
+                try:
+                    pdf_obj.close()
+                except Exception:
+                    pass
 
         # Deduplicate records
         dedup_res = deduplicate_records(flat_records)
@@ -582,7 +597,6 @@ class DocumentAIService:
         val_score = 98.5 if valid_records else 0.0
 
         proc_time_ms = round((time.perf_counter() - t_start) * 1000, 2)
-
         return {
             "document_id": doc_id,
             "file_name": f_name,
