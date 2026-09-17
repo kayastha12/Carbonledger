@@ -90,12 +90,19 @@ class FieldMapper:
         "product description": "material",
         "description": "material",
         "item description": "material",
+        "item desc": "material",
+        "item name": "material",
         "item": "material",
+        "items": "material",
         "goods": "material",
         "goods description": "material",
         "particulars": "material",
         "article": "material",
         "commodity": "material",
+        "line description": "material",
+        "line": "line_number",
+        "line no": "line_number",
+        "line item": "line_number",
         "description of goods": "material",
         "nature of goods": "material",
         "description of supply": "material",
@@ -103,6 +110,13 @@ class FieldMapper:
         # ─── Quantity ─────────────────────────────────────────────────────────────
         "quantity": "quantity",
         "qty": "quantity",
+        "amount qty": "quantity",
+        "purchased qty": "quantity",
+        "purchased quantity": "quantity",
+        "billed qty": "quantity",
+        "invoiced qty": "quantity",
+        "order qty": "quantity",
+        "delivered qty": "quantity",
         "no. of units": "quantity",
         "no of units": "quantity",
         "number of units": "quantity",
@@ -114,9 +128,13 @@ class FieldMapper:
 
         # ─── Unit of Measure ─────────────────────────────────────────────────────
         "unit": "unit",
+        "units": "unit",
         "uom": "unit",
+        "u.o.m": "unit",
+        "u.o.m.": "unit",
         "unit of measure": "unit",
         "unit of measurement": "unit",
+        "measure": "unit",
         "u/m": "unit",
 
         # ─── Weight ───────────────────────────────────────────────────────────────
@@ -129,6 +147,7 @@ class FieldMapper:
         "gross wt.": "weight",
         "net mass": "weight",
         "gross mass": "weight",
+        "mass": "weight",
         "cargo weight": "weight",
         "cargo wt": "weight",
         "cargo wt.": "weight",
@@ -147,6 +166,11 @@ class FieldMapper:
         "net amount": "total_amount",
         "basic amount": "total_amount",
         "taxable amount": "total_amount",
+        "taxable value": "total_amount",
+        "line total": "total_amount",
+        "item total": "total_amount",
+        "sub total": "total_amount",
+        "subtotal": "total_amount",
         "total paid": "total_amount",
         "total bill amount": "total_amount",
         "cost": "total_amount",
@@ -178,6 +202,7 @@ class FieldMapper:
 
         # ─── Transport ────────────────────────────────────────────────────────────
         "origin": "origin",
+        "dispatch location": "origin",
         "loading location": "origin",
         "port of loading": "origin",
         "port of load": "origin",
@@ -317,9 +342,11 @@ class FieldMapper:
         if not raw_label:
             return "unknown"
 
-        # Normalize: lowercase, strip punctuation/whitespace
+        # Normalize: lowercase, strip punctuation/whitespace, replace underscores/hyphens with spaces
         lbl = raw_label.lower().strip()
         lbl = re.sub(r"[:\-]+$", "", lbl).strip()
+        lbl = re.sub(r"[_\-]+", " ", lbl).strip()
+        lbl = re.sub(r"\s+", " ", lbl).strip()
         lbl_nopunct = re.sub(r"[^a-z0-9 /().]", " ", lbl).strip()
         lbl_nopunct = re.sub(r"\s+", " ", lbl_nopunct).strip()
 
@@ -366,6 +393,8 @@ class FieldMapper:
 
         # Material / Product
         if re.search(r"\b(material|product|goods|item|article|commodity|particulars|description)\b", lbl):
+            if re.search(r"\b(subtotal|total|summary|amount|value|tax|charge)\b", lbl):
+                return "total_amount"
             if re.search(r"\b(code|no|num|id)\b", lbl):
                 return "commodity_code"
             return "material"
@@ -431,6 +460,11 @@ class FieldMapper:
             return "country"
 
         return "unknown"
+
+    @classmethod
+    def map_header(cls, raw_label: str) -> str:
+        """Alias for get_canonical_field for seamless pipeline compatibility."""
+        return cls.get_canonical_field(raw_label)
 
     @classmethod
     def is_excluded(cls, raw_label: str) -> bool:

@@ -188,61 +188,27 @@ def validate_table(
     # Numeric density check
     num_density = _numeric_density(table)
 
-    # Build semantic score based on doc_type
+    # Build semantic score across all domain header keyword groups
+    hits_transport = max(_count_keyword_hits(headers, _TRANSPORT_HEADER_KEYWORDS), _count_keyword_hits(headers, _SHIPPING_HEADER_KEYWORDS))
+    hits_invoice = _count_keyword_hits(headers, _INVOICE_HEADER_KEYWORDS)
+    hits_utility = _count_keyword_hits(headers, _UTILITY_HEADER_KEYWORDS)
+    fuel_terms = {"fuel", "diesel", "petrol", "lpg", "litre", "liter", "gallon", "quantity", "consumption"}
+    hits_fuel = _count_keyword_hits(headers, fuel_terms)
+    hits_cbam = _count_keyword_hits(headers, _CBAM_HEADER_KEYWORDS)
+
+    best_domain_hits = max(hits_transport, hits_invoice, hits_utility, hits_fuel, hits_cbam)
+
     confidence = 0.0
-
-    if doc_type in {"TRANSPORTATION_INVOICE", "SHIPPING_MANIFEST", "BILL_OF_LADING", "LOGISTICS_SHIPPING"}:
-        hits = _count_keyword_hits(headers, _TRANSPORT_HEADER_KEYWORDS)
-        shipping_hits = _count_keyword_hits(headers, _SHIPPING_HEADER_KEYWORDS)
-        best_hits = max(hits, shipping_hits)
-        n_cols = len(headers)
-
-        if best_hits >= 3:
-            confidence = 0.85 + min(0.10, (best_hits - 3) * 0.02)
-        elif best_hits == 2:
-            confidence = 0.70
-        elif best_hits == 1:
-            confidence = 0.55
-        else:
-            # No keyword hits but check numeric density — a distance/weight table
-            if num_density > 0.4 and n_cols >= 4:
-                confidence = 0.55
-            else:
-                return False, 0.25, f"Transport table has no recognizable transport headers ({best_hits} hits)"
-
-    elif doc_type in {"PURCHASE_INVOICE", "MATERIAL_CONSUMPTION"}:
-        hits = _count_keyword_hits(headers, _INVOICE_HEADER_KEYWORDS)
-        if hits >= 3:
-            confidence = 0.85 + min(0.10, (hits - 3) * 0.02)
-        elif hits == 2:
-            confidence = 0.70
-        elif hits == 1:
-            # Accept if numeric density is significant
-            confidence = 0.55 if num_density > 0.3 else 0.35
-
-    elif doc_type in {"ELECTRICITY_BILL", "UTILITY_BILL"}:
-        hits = _count_keyword_hits(headers, _UTILITY_HEADER_KEYWORDS)
-        if hits >= 2:
-            confidence = 0.80
-        elif hits >= 1:
-            confidence = 0.60
-
-    elif doc_type in {"FUEL_INVOICE"}:
-        fuel_terms = {"fuel", "diesel", "petrol", "lpg", "litre", "liter", "gallon", "quantity", "consumption"}
-        hits = _count_keyword_hits(headers, fuel_terms | _INVOICE_HEADER_KEYWORDS)
-        confidence = min(0.90, 0.55 + hits * 0.10)
-
-    elif doc_type in {"CBAM_PRODUCT_MAPPING"}:
-        hits = _count_keyword_hits(headers, _CBAM_HEADER_KEYWORDS)
-        confidence = min(0.90, 0.55 + hits * 0.10)
-
+    if best_domain_hits >= 3:
+        confidence = 0.85 + min(0.10, (best_domain_hits - 3) * 0.02)
+    elif best_domain_hits == 2:
+        confidence = 0.70
+    elif best_domain_hits == 1:
+        confidence = 0.55 if num_density > 0.3 else 0.35
+    elif num_density > 0.4 and len(headers) >= 3:
+        confidence = 0.55
     else:
-        # Generic: any table with reasonable structure
-        hits = _count_keyword_hits(headers, _INVOICE_HEADER_KEYWORDS | _UTILITY_HEADER_KEYWORDS)
-        if hits >= 2:
-            confidence = 0.65
-        elif hits == 1 or num_density > 0.3:
-            confidence = 0.55
+        confidence = 0.25
 
     # Numeric density bonus
     if num_density > 0.5 and confidence > 0.40:

@@ -66,10 +66,6 @@ export default function DashboardApp() {
   const [chatInput, setChatInput] = useState('');
   const [isChatLoading, setIsChatLoading] = useState(false);
 
-  // Scenario Analysis State
-  const [selectedStrategy, setSelectedStrategy] = useState('eaf_steel');
-  const [scenarioResult, setScenarioResult] = useState(null);
-  const [isScenarioLoading, setIsScenarioLoading] = useState(false);
 
   // Admin SaaS Console States
   const [adminSubTab, setAdminSubTab] = useState('overview');
@@ -474,6 +470,8 @@ export default function DashboardApp() {
             themeBorder={themeBorder}
             themeText={themeText}
             themeSubtext={themeSubtext}
+            reviewedRecords={reviewedRecords}
+            universalStatus={universalStatus}
           />
         )}
 
@@ -531,12 +529,6 @@ export default function DashboardApp() {
             setChatInput={setChatInput}
             isChatLoading={isChatLoading}
             setIsChatLoading={setIsChatLoading}
-            selectedStrategy={selectedStrategy}
-            setSelectedStrategy={setSelectedStrategy}
-            scenarioResult={scenarioResult}
-            setScenarioResult={setScenarioResult}
-            isScenarioLoading={isScenarioLoading}
-            setIsScenarioLoading={setIsScenarioLoading}
             setLowTokenDetails={setLowTokenDetails}
             setShowLowTokenModal={setShowLowTokenModal}
             refreshUserData={refreshUserData}

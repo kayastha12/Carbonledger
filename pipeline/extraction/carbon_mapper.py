@@ -232,9 +232,46 @@ class CarbonMapper:
 
     def classify_activity(self, doc_type: str, raw_record: dict, text: str) -> Tuple[str, str, str]:
         # returns (activity_type, scope, category)
-        val_str = json.dumps(raw_record).lower() + " " + text.lower()
-        
-        # 1. Document type direct matching
+        rec_json = json.dumps(raw_record).lower()
+
+        # 1. Structural inspection of the extracted row record itself (highest priority)
+        # 1a. Transport / Logistics row
+        has_trans_fields = any(k in raw_record for k in ["transport_mode", "origin", "destination", "distance", "distance_unit", "shipment_id", "lr_number", "lr_no", "vehicle_no", "stage"])
+        has_trans_vals = any(t in rec_json for t in ["truck", "rail", "road - hgv", "ship", "freight", "distance", "origin", "destination"])
+        if has_trans_fields or (has_trans_vals and not raw_record.get("material") and not raw_record.get("commodity_code")):
+            return "TRANSPORTATION", "SCOPE_3", "TRANSPORT"
+
+        # 1b. Electricity / Utility row
+        has_util_fields = any(k in raw_record for k in ["utility_type", "consumption_kwh", "grid_id", "grid_region", "bill_id", "meter_number", "meter_reading"])
+        if has_util_fields:
+            ut = str(raw_record.get("utility_type") or "").lower()
+            if "gas" in ut or "natural gas" in ut:
+                return "NATURAL_GAS_CONSUMPTION", "SCOPE_1", "ENERGY"
+            elif "steam" in ut:
+                return "STEAM_CONSUMPTION", "SCOPE_2", "ENERGY"
+            return "ELECTRICITY_CONSUMPTION", "SCOPE_2", "ENERGY"
+
+        # 1c. Fuel row (direct fuel without transportation freight context)
+        has_fuel_fields = any(k in raw_record for k in ["fuel_id", "fuel_type"]) or ("fuel" in raw_record and not raw_record.get("material"))
+        if has_fuel_fields and not has_trans_fields:
+            return "FUEL_CONSUMPTION", "SCOPE_1", "FUEL"
+
+        # 1d. Material / Purchased Goods row
+        has_mat_fields = any(k in raw_record for k in ["material", "product", "material_type", "material_id", "hs_code", "cn_code", "commodity_code"])
+        if has_mat_fields:
+            if doc_type == "PURCHASE_ORDER" or "po_id" in raw_record or "purchase_order_number" in raw_record:
+                return "PURCHASE_ORDER", "SCOPE_3", "MATERIAL"
+            return "PURCHASED_GOODS", "SCOPE_3", "MATERIAL"
+
+        # 1e. Facility / Plant row
+        if "facility_id" in raw_record or "plant_name" in raw_record or doc_type == "FACILITY_PLANT":
+            return "FACILITY_ACTIVITY", "SCOPE_1", "FACILITY"
+
+        # 1f. CBAM Mapping row
+        if "cn_code" in raw_record or doc_type == "CBAM_PRODUCT_MAPPING":
+            return "CBAM_PRODUCT", "SCOPE_3", "MATERIAL"
+
+        # 2. Document type direct matching
         if doc_type in ["TRANSPORTATION_INVOICE", "SHIPPING_MANIFEST", "BILL_OF_LADING", "LOGISTICS_SHIPPING"]:
             return "TRANSPORTATION", "SCOPE_3", "TRANSPORT"
         elif doc_type in ["ELECTRICITY_BILL", "ELECTRICITY_GRID", "UTILITY_BILL"]:
@@ -252,8 +289,11 @@ class CarbonMapper:
             return "CBAM_PRODUCT", "SCOPE_3", "MATERIAL"
         elif doc_type == "PURCHASE_ORDER":
             return "PURCHASE_ORDER", "SCOPE_3", "MATERIAL"
-            
-        # 2. Text keyword matching for other/mixed cases
+        elif doc_type in ["PURCHASE_INVOICE", "MATERIAL_CONSUMPTION"]:
+            return "PURCHASED_GOODS", "SCOPE_3", "MATERIAL"
+
+        # 3. Unstructured text keyword matching fallback
+        val_str = rec_json + " " + text.lower()
         if any(f in val_str for f in ["diesel", "petrol", "lpg", "fuel id", "fuel type", "fuel_type"]) and "distance" not in val_str:
             return "FUEL_CONSUMPTION", "SCOPE_1", "FUEL"
         if any(e in val_str for e in ["electricity", "kwh", "grid id", "electricity grid"]):
@@ -268,11 +308,7 @@ class CarbonMapper:
             if "purchase order" in val_str or doc_type == "PURCHASE_ORDER":
                 return "PURCHASE_ORDER", "SCOPE_3", "MATERIAL"
             return "PURCHASED_GOODS", "SCOPE_3", "MATERIAL"
-            
-        # 3. Fallbacks
-        if doc_type in ["PURCHASE_INVOICE", "MATERIAL_CONSUMPTION"]:
-            return "PURCHASED_GOODS", "SCOPE_3", "MATERIAL"
-            
+
         return "OTHER", "UNKNOWN", "OTHER"
 
     def check_calculation_ready(self, activity_type: str, act: dict) -> Tuple[bool, List[str]]:

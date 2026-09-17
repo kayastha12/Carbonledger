@@ -1,24 +1,24 @@
-import urllib.request
-import urllib.error
-import json
 import uuid
+from fastapi.testclient import TestClient
+from api.main import app
 
-BASE_URL = "http://127.0.0.1:8000"
+client = TestClient(app)
 
 def make_req(endpoint, method="GET", data=None, headers=None):
-    req_headers = {"Content-Type": "application/json"}
-    if headers:
-        req_headers.update(headers)
-    url = f"{BASE_URL}{endpoint}"
-    req_data = json.dumps(data).encode("utf-8") if data is not None else None
-    req = urllib.request.Request(url, data=req_data, headers=req_headers, method=method)
+    req_headers = headers or {}
+    if method == "POST":
+        resp = client.post(endpoint, json=data, headers=req_headers)
+    elif method == "GET":
+        resp = client.get(endpoint, headers=req_headers)
+    elif method == "DELETE":
+        resp = client.delete(endpoint, headers=req_headers)
+    else:
+        resp = client.request(method, endpoint, json=data, headers=req_headers)
     try:
-        with urllib.request.urlopen(req) as resp:
-            body = resp.read().decode("utf-8")
-            return resp.status, json.loads(body) if body else {}
-    except urllib.error.HTTPError as e:
-        body = e.read().decode("utf-8")
-        return e.code, json.loads(body) if body else {}
+        body = resp.json()
+    except Exception:
+        body = {}
+    return resp.status_code, body
 
 
 def test_full_saas_lifecycle():

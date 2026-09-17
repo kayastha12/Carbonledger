@@ -178,9 +178,6 @@ class EmissionFactorService:
             if act_key:
                 self.exact_lookup[act_key] = record
                 self.exact_lookup[f"{act_key}|{scope.lower()}|{uom}"] = record
-                for word in act_key.split():
-                    if len(word) > 3 and word not in self.exact_lookup:
-                        self.exact_lookup[word] = record
 
             # 3. Normalized Match Indexing
             norm_key = self._normalize_text(activity)
@@ -199,6 +196,13 @@ class EmissionFactorService:
             if fuzzy_desc not in self.fuzzy_choice_to_records:
                 self.fuzzy_choice_to_records[fuzzy_desc] = []
             self.fuzzy_choice_to_records[fuzzy_desc].append(record)
+
+        # Pre-warm WorkbookFactorEngine
+        try:
+            from services.workbook_factor_engine import WorkbookFactorEngine
+            WorkbookFactorEngine.get_instance()
+        except Exception:
+            pass
 
         self.metrics["total_factors_loaded"] = len(self.factors_list)
         self.is_initialized = True
@@ -228,7 +232,7 @@ class EmissionFactorService:
             except Exception as e:
                 logger.warning(f"ChromaService connection unavailable: {e}")
                 self.chroma_service = False
-        return self.chroma_service if self.chroma_service else None
+            return self.chroma_service if self.chroma_service else None
 
     def get_factor_by_id(self, factor_id: str) -> Optional[EmissionFactorMatch]:
         t_start = time.perf_counter()
@@ -282,7 +286,7 @@ class EmissionFactorService:
                 return match
 
         # ----------------------------------------------------
-        # Tier 1: Exact Match
+        # Tier 1: Exact Match by ID or Full Key
         # ----------------------------------------------------
         if query in self.id_lookup:
             rec = self.id_lookup[query]
@@ -296,17 +300,6 @@ class EmissionFactorService:
             self._cache_and_update_metrics(cache_key, match, "exact")
             return match
 
-        # Key token exact matches
-        tokens = [t for t in q_norm.split() if t not in ["use", "record", "bill", "invoice"]]
-        for token in [q_norm, exact_key] + tokens:
-            if token in self.exact_lookup:
-                rec = self.exact_lookup[token]
-                if scope and str(rec.get("scope")).lower() != scope.lower():
-                    continue
-                match = self._build_match_result(rec, 1.0, "exact", t_start)
-                self._cache_and_update_metrics(cache_key, match, "exact")
-                return match
-
         # ----------------------------------------------------
         # Tier 2: Normalized Match
         # ----------------------------------------------------
@@ -318,14 +311,59 @@ class EmissionFactorService:
             return match
 
         # ----------------------------------------------------
-        # Tier 3: RapidFuzz Match
+        # Tier 2.5: Canonical Workbook Factor Engine Bridge
+        # ----------------------------------------------------
+        try:
+            from services.workbook_factor_engine import WorkbookFactorEngine
+            wb_engine = WorkbookFactorEngine.get_instance()
+            q_low = query.lower()
+            is_fuel = (str(scope).lower() == "scope 1" or any(k in q_low for k in ["diesel", "fuel", "petrol", "gasoline", "lpg"]))
+            is_transport = (str(scope).lower() == "scope 3" and any(k in q_low for k in ["freight", "transport", "hgv", "rail", "truck", "road", "shipping"]))
+            act_type = "FUEL_CONSUMPTION" if is_fuel else ("TRANSPORTATION" if is_transport else "PURCHASED_GOODS")
+            eval_res = wb_engine.evaluate_activity({
+                "activity": {
+                    "material": query,
+                    "transport_mode": query if is_transport else None,
+                    "fuel_type": query if is_fuel else None,
+                    "activity_type": act_type,
+                    "weight": 1000.0,
+                    "weight_unit": "kg",
+                    "distance": 1.0,
+                    "distance_unit": "km",
+                    "quantity": 1.0,
+                    "unit": unit or ("litres" if is_fuel else ("tonne.km" if is_transport else "kg"))
+                },
+                "scope": scope or ("Scope 1" if is_fuel else "Scope 3")
+            })
+            if eval_res.get("calculation_status") == "READY" and eval_res.get("factor"):
+                f_data = eval_res["factor"]
+                rec_match = self.id_lookup.get(str(f_data.get("id")))
+                if not rec_match:
+                    rec_match = {
+                        "id": str(f_data.get("id")),
+                        "activity": f_data.get("level_3") or query,
+                        "scope": f_data.get("scope", scope or "Scope 3"),
+                        "uom": f_data.get("uom", unit or "kg"),
+                        "factor": float(f_data.get("value", 0.0)),
+                        "source_sheet": f_data.get("source", "Authoritative Workbook"),
+                        "factor_version": "2026.1",
+                        "category": f_data.get("level_2", "General")
+                    }
+                match = self._build_match_result(rec_match, eval_res.get("confidence", 1.0), "exact", t_start)
+                self._cache_and_update_metrics(cache_key, match, "exact")
+                return match
+        except Exception:
+            pass
+
+        # ----------------------------------------------------
+        # Tier 3: RapidFuzz Match (Score cutoff >= 80)
         # ----------------------------------------------------
         if self.fuzzy_choices:
             best_fuzzy = process.extractOne(
                 q_norm,
                 self.fuzzy_choices,
                 scorer=fuzz.WRatio,
-                score_cutoff=65
+                score_cutoff=80
             )
             if best_fuzzy:
                 fuzzy_str, score, _ = best_fuzzy
@@ -336,6 +374,7 @@ class EmissionFactorService:
                     match = self._build_match_result(best_rec, confidence, "rapidfuzz", t_start)
                     self._cache_and_update_metrics(cache_key, match, "rapidfuzz")
                     return match
+
 
         # ----------------------------------------------------
         # Tier 4: Embedding Vector Search

@@ -145,10 +145,21 @@ class UniversalUploadService:
                     records.extend(parsed_records)
                     logs.append(f"[Parser] Extracted {len(parsed_records)} records from structural source.")
 
-                # Document AI Model Extraction (D:\internship\mlmodel\carbonledger-document-ai)
-                elif ext == ".pdf" or ext in [".png", ".jpg", ".jpeg", ".tiff"]:
+                # Document AI Model Extraction (PDF, Images, Text)
+                elif ext in [".pdf", ".png", ".jpg", ".jpeg", ".tiff", ".txt"]:
                     logs.append(f"[DocumentAI] Running CarbonLedger Document AI extraction on '{f_name}'...")
-                    ai_res = self.document_ai_service.extract_document(f_path, f_name)
+                    try:
+                        ai_res = self.document_ai_service.extract_document(f_path, f_name)
+                    except Exception as pdf_err:
+                        # Fallback for plain text or simulated invoice files
+                        try:
+                            with open(f_path, "r", encoding="utf-8", errors="ignore") as tf:
+                                raw_txt = tf.read()
+                            fallback_recs = self.document_ai_service.extract_from_text(raw_txt, f_name)
+                            ai_res = {"records": fallback_recs, "pages_count": 1, "tables_count": 1, "logs": [f"Parsed via text extractor: {pdf_err}"]}
+                        except Exception:
+                            raise pdf_err
+
                     extracted_carbon_records = ai_res.get("records", [])
                     records.extend(extracted_carbon_records)
                     
@@ -232,7 +243,7 @@ class UniversalUploadService:
             if not material:
                 raise ValueError(f"Material Missing on Row {idx}")
                 
-            qty = rec.get("quantity") if rec.get("quantity") is not None else (rec.get("activity", {}).get("quantity") if rec.get("activity", {}).get("quantity") is not None else rec.get("activity", {}).get("consumption"))
+            qty = rec.get("quantity") if rec.get("quantity") is not None else (rec.get("activity", {}).get("quantity") if rec.get("activity", {}).get("quantity") is not None else (rec.get("activity", {}).get("consumption") if rec.get("activity", {}).get("consumption") is not None else (rec.get("weight") if rec.get("weight") is not None else (rec.get("activity", {}).get("weight") if rec.get("activity", {}).get("weight") is not None else (rec.get("distance") or rec.get("activity", {}).get("distance"))))))
             if qty is None:
                 raise ValueError(f"Quantity Invalid on Row {idx}")
             try:
@@ -242,7 +253,7 @@ class UniversalUploadService:
             except (ValueError, TypeError):
                 raise ValueError(f"Quantity Invalid on Row {idx}")
                 
-            unit = str(rec.get("unit") or rec.get("activity", {}).get("unit") or rec.get("activity", {}).get("consumption_unit") or "").strip().lower()
+            unit = str(rec.get("unit") or rec.get("activity", {}).get("unit") or rec.get("activity", {}).get("consumption_unit") or rec.get("weight_unit") or rec.get("activity", {}).get("weight_unit") or rec.get("distance_unit") or rec.get("activity", {}).get("distance_unit") or "").strip().lower()
             valid_units = {
                 "kg", "g", "tonne", "t", "tonnes", "lb", "pounds",
                 "m3", "m³", "mcm", "mt", "cubic meters", "cubic metres", "mwh",
@@ -323,7 +334,7 @@ class UniversalUploadService:
             material = rec.get("material") or rec.get("activity", {}).get("material") or rec.get("activity", {}).get("product") or rec.get("activity", {}).get("transport_mode") or rec.get("activity", {}).get("fuel_type") or rec.get("activity", {}).get("energy_type")
             qty_raw = rec.get("quantity") if rec.get("quantity") is not None else (rec.get("activity", {}).get("quantity") if rec.get("activity", {}).get("quantity") is not None else (rec.get("activity", {}).get("consumption") if rec.get("activity", {}).get("consumption") is not None else rec.get("activity", {}).get("weight")))
             quantity = self.normalize_numeric(qty_raw)
-            unit = rec.get("unit") or rec.get("activity", {}).get("unit") or rec.get("activity", {}).get("consumption_unit") or rec.get("activity", {}).get("weight_unit") or "kg"
+            unit = rec.get("unit") if rec.get("unit") is not None else (rec.get("activity", {}).get("unit") or rec.get("activity", {}).get("consumption_unit") or rec.get("activity", {}).get("weight_unit"))
             cost_raw = rec.get("cost") if rec.get("cost") is not None else rec.get("financial", {}).get("amount")
             cost = self.normalize_numeric(cost_raw)
             delivery_date = rec.get("delivery_date") or rec.get("activity", {}).get("delivery_date")
@@ -600,6 +611,10 @@ class UniversalUploadService:
             "summary": summary,
             "reports": reports_map,
             "comparison_report": validation_result,
+            "records": inventory_records,
             "inventory_records": inventory_records,
+            "ai_confidence": validation_scores.get("overall_confidence_pct", 0.0),
             "audit_trail_path": os.path.join(self.output_dir, "uploads", upload_id)
         }
+
+    process_universal_file = parse_uploaded_file

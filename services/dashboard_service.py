@@ -22,10 +22,10 @@ class DashboardService:
         """
         total_records_count = len(inventory_records)
         
-        scope_1_kg = sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 1")
-        scope_2_kg = sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 2")
-        scope_3_kg = sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 3")
-        total_cbam_cost_eur = sum(r["cbam_cost_eur"] for r in inventory_records)
+        scope_1_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 1"), 2)
+        scope_2_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 2"), 2)
+        scope_3_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 3"), 2)
+        total_cbam_cost_eur = round(sum(r["cbam_cost_eur"] for r in inventory_records), 2)
         total_co2e_kg = round(scope_1_kg + scope_2_kg + scope_3_kg, 2)
         
         matched_factors_count = sum(1 for r in inventory_records if r["calculation_status"] == "Calculated")
@@ -38,11 +38,11 @@ class DashboardService:
             "rows_manual_review": total_records_count - matched_factors_count,
             "total_co2e_kg": total_co2e_kg,
             "total_co2e_tonnes": round(total_co2e_kg / 1000.0, 3),
-            "total_cbam_cost_eur": round(total_cbam_cost_eur, 2),
+            "total_cbam_cost_eur": total_cbam_cost_eur,
             "carbon_price_eur_per_ton": carbon_price,
-            "scope_1_co2e_kg": round(scope_1_kg, 2),
-            "scope_2_co2e_kg": round(scope_2_kg, 2),
-            "scope_3_co2e_kg": round(scope_3_kg, 2),
+            "scope_1_co2e_kg": scope_1_kg,
+            "scope_2_co2e_kg": scope_2_kg,
+            "scope_3_co2e_kg": scope_3_kg,
             "materials_count": len(set([r["material"] for r in inventory_records])) if inventory_records else 0,
             "suppliers_count": len(set([r["supplier"] for r in inventory_records])) if inventory_records else 0,
             "overall_confidence_pct": validation_scores.get("overall_confidence_pct", 0.0)

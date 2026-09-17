@@ -279,6 +279,46 @@ def init_db():
     )
     """)
 
+    # 16. Upload Batches Table (Bulk Invoice Processing)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS upload_batches (
+        batch_id TEXT PRIMARY KEY,
+        user_id INTEGER NOT NULL,
+        status TEXT NOT NULL DEFAULT 'QUEUED',
+        total_files INTEGER NOT NULL DEFAULT 0,
+        processed_count INTEGER NOT NULL DEFAULT 0,
+        completed_count INTEGER NOT NULL DEFAULT 0,
+        review_count INTEGER NOT NULL DEFAULT 0,
+        failed_count INTEGER NOT NULL DEFAULT 0,
+        current_file TEXT,
+        started_at TEXT,
+        completed_at TEXT,
+        created_at TEXT,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """)
+
+    # 17. Batch Jobs Table (Per-invoice job tracking)
+    cursor.execute("""
+    CREATE TABLE IF NOT EXISTS batch_jobs (
+        job_id TEXT PRIMARY KEY,
+        batch_id TEXT NOT NULL,
+        user_id INTEGER NOT NULL,
+        filename TEXT NOT NULL,
+        upload_id TEXT,
+        status TEXT NOT NULL DEFAULT 'QUEUED',
+        extracted_count INTEGER DEFAULT 0,
+        calculated_count INTEGER DEFAULT 0,
+        review_count INTEGER DEFAULT 0,
+        total_co2e_kg REAL DEFAULT 0.0,
+        error_message TEXT,
+        created_at TEXT,
+        updated_at TEXT,
+        FOREIGN KEY (batch_id) REFERENCES upload_batches(batch_id) ON DELETE CASCADE,
+        FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
+    )
+    """)
+
     # Column Alterations / Migrations for existing databases
     tables_to_add_user_id = [
         "upload_sessions",

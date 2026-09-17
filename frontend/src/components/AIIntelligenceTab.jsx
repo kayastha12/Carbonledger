@@ -9,12 +9,6 @@ export default function AIIntelligenceTab({
   setChatInput,
   isChatLoading,
   setIsChatLoading,
-  selectedStrategy,
-  setSelectedStrategy,
-  scenarioResult,
-  setScenarioResult,
-  isScenarioLoading,
-  setIsScenarioLoading,
   setLowTokenDetails,
   setShowLowTokenModal,
   refreshUserData,
@@ -124,27 +118,6 @@ export default function AIIntelligenceTab({
     ]);
   };
 
-  const handleRunSimulation = () => {
-    if ((currentUser?.token_balance || 0) < 20) {
-      setLowTokenDetails({ required: 20, current: currentUser?.token_balance || 0 });
-      setShowLowTokenModal(true);
-      return;
-    }
-    setIsScenarioLoading(true);
-    fetch(`${API_BASE}/api/what-if`, {
-      method: 'POST',
-      headers: getAuthHeaders ? getAuthHeaders() : { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ strategy: selectedStrategy })
-    })
-      .then(res => res.json())
-      .then(data => {
-        setIsScenarioLoading(false);
-        setScenarioResult(data);
-        if (refreshUserData) refreshUserData();
-      })
-      .catch(() => setIsScenarioLoading(false));
-  };
-
   // Simple Markdown text formatter for responses
   const renderFormattedMessage = (text) => {
     if (!text) return null;
@@ -210,13 +183,13 @@ export default function AIIntelligenceTab({
   };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1.35fr 1fr', gap: '24px' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: '24px' }}>
       
       {/* AI Copilot Chat */}
       <div style={{
         padding: '24px', borderRadius: '18px',
         backgroundColor: themeCard, border: `1px solid ${themeBorder}`,
-        display: 'flex', flexDirection: 'column', height: '640px',
+        display: 'flex', flexDirection: 'column', height: '680px',
         boxShadow: isDarkMode ? '0 8px 30px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.04)'
       }}>
         {/* Header */}
@@ -362,62 +335,6 @@ export default function AIIntelligenceTab({
             {isChatLoading ? 'Tracing...' : 'Send (⚡ 5)'}
           </button>
         </form>
-      </div>
-
-      {/* What-If Decarbonization Simulator */}
-      <div style={{
-        padding: '24px', borderRadius: '18px', backgroundColor: themeCard,
-        border: `1px solid ${themeBorder}`, display: 'flex', flexDirection: 'column',
-        justifyContent: 'space-between', height: '640px',
-        boxShadow: isDarkMode ? '0 8px 30px rgba(0,0,0,0.3)' : '0 4px 20px rgba(0,0,0,0.04)'
-      }}>
-        <div>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '14px', paddingBottom: '12px', borderBottom: `1px solid ${themeBorder}` }}>
-            <div>
-              <h3 style={{ fontSize: '16px', fontWeight: '800', margin: 0, color: '#3b82f6' }}>🔮 What-If Decarbonization Simulator</h3>
-              <p style={{ fontSize: '11px', color: themeSubtext, margin: '2px 0 0' }}>Simulate certified emission reduction pathways</p>
-            </div>
-            <span style={{ fontSize: '10px', padding: '4px 10px', borderRadius: '12px', backgroundColor: 'rgba(59,130,246,0.1)', color: '#60a5fa', fontWeight: 'bold' }}>
-              ⚡ 20 Tokens
-            </span>
-          </div>
-
-          <div style={{ marginBottom: '16px' }}>
-            <label style={{ display: 'block', fontSize: '12px', fontWeight: 'bold', marginBottom: '6px', color: themeText }}>Decarbonization Pathway</label>
-            <select 
-              value={selectedStrategy} onChange={e => setSelectedStrategy(e.target.value)}
-              style={{ width: '100%', padding: '10px', borderRadius: '8px', border: `1px solid ${themeBorder}`, backgroundColor: isDarkMode ? '#080c14' : '#fff', color: themeText, fontSize: '12px' }}>
-              <option value="eaf_steel">Switch to Electric Arc Furnace (EAF) Steel (-65% CO₂e)</option>
-              <option value="renewable_grid">100% PPA Renewable Electricity Grid (-85% Scope 2)</option>
-              <option value="supplier_nearshoring">Nearshore Value Chain Logistics (-40% Freight)</option>
-            </select>
-          </div>
-
-          <button 
-            onClick={handleRunSimulation}
-            disabled={isScenarioLoading}
-            style={{ width: '100%', padding: '11px', borderRadius: '8px', backgroundColor: '#3b82f6', color: '#fff', border: 'none', fontWeight: '800', fontSize: '13px', cursor: 'pointer', marginBottom: '16px', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            {isScenarioLoading ? 'Simulating Pathway...' : 'Run Simulation (⚡ 20 Tokens)'}
-          </button>
-
-          {scenarioResult && (
-            <div style={{ padding: '18px', borderRadius: '12px', backgroundColor: isDarkMode ? '#080c14' : '#f1f5f9', border: `1px solid ${themeBorder}` }}>
-              <div style={{ fontSize: '12px', color: '#10b981', fontWeight: '800', marginBottom: '8px', textTransform: 'uppercase' }}>Simulation Forecast Results:</div>
-              <div style={{ fontSize: '13px', color: themeText, marginBottom: '4px' }}>Baseline Footprint: <strong>{scenarioResult.baseline_emissions_t} tonnes CO₂e</strong></div>
-              <div style={{ fontSize: '13px', color: '#10b981', marginBottom: '4px' }}>Projected Footprint: <strong>{scenarioResult.projected_emissions_t} tonnes (-{scenarioResult.reduction_pct}%)</strong></div>
-              <div style={{ fontSize: '12px', color: themeSubtext, marginTop: '6px' }}>Estimated CBAM Cost Savings: <strong>€{scenarioResult.estimated_cbam_savings_eur}</strong></div>
-            </div>
-          )}
-        </div>
-
-        {/* Traceability Guarantee Banner */}
-        <div style={{
-          padding: '14px', borderRadius: '12px',
-          backgroundColor: isDarkMode ? 'rgba(16,185,129,0.05)' : '#ecfdf5',
-          border: '1px solid rgba(16,185,129,0.2)', fontSize: '11.5px', color: themeSubtext
-        }}>
-          <strong style={{ color: '#10b981' }}>🛡️ CarbonLedger Audit Contract</strong>: All calculations, factors, and report values are deterministically linked to your verified workspace records with zero hallucination.
-        </div>
       </div>
 
     </div>

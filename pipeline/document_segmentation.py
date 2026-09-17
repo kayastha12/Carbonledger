@@ -259,7 +259,7 @@ def _score_page(text_lower: str) -> Tuple[str, float]:
 
 # Pages with these keywords are clearly non-actionable cover/summary pages
 _SUMMARY_PAGE_MARKERS = {
-    "dataset summary", "purpose & usage", "sample dataset",
+    "dataset summary", "purpose & usage",
     "data coverage", "data dictionary", "table of contents",
     "index", "instructions", "how to use",
 }
@@ -278,8 +278,16 @@ class DocumentSegmenter:
 
         low = page_text.lower()
 
-        # Reject summary/cover pages
-        if any(marker in low for marker in _SUMMARY_PAGE_MARKERS):
+        # Only reject summary/cover pages if there are no explicit transaction signals on the page
+        transaction_signals = [
+            "invoice", "tax invoice", "purchase order", "po no", "bill of lading",
+            "material", "quantity", "unit", "weight", "consumption", "kwh",
+            "transport", "distance", "shipping", "phase 1", "phase 2", "phase 3",
+            "phase 4", "phase 5", "phase 6", "phase 7", "phase 8", "phase 9", "phase 10"
+        ]
+        has_transaction_signal = any(sig in low for sig in transaction_signals)
+
+        if not has_transaction_signal and any(marker in low for marker in _SUMMARY_PAGE_MARKERS):
             return "UNKNOWN", 0.50
 
         return _score_page(low)

@@ -4,6 +4,7 @@ import time
 import json
 import hashlib
 import re
+import uuid
 from typing import Dict, Any, List, Optional, Tuple
 
 # Ensure project root is accessible in sys.path
@@ -105,9 +106,15 @@ class DocumentAIService:
                 return False
             if not mat:
                 return False
-            # Check for generic fallback strings and reject
+            # Check for generic fallback strings and summary/tax rows and reject
             mat_str = str(mat).lower().strip()
-            if mat_str in ["unspecified material", "unknown material", "generic material", "other material", "—", "-"]:
+            reject_material_words = [
+                "unspecified material", "unknown material", "generic material", "other material", "—", "-",
+                "subtotal", "material subtotal", "taxable value", "cgst", "sgst", "igst", "vat", "gst",
+                "grand total", "total", "rounding", "freight charge", "freight / transport charge",
+                "transport charge", "total amount", "tax amount", "invoice total"
+            ]
+            if any(rw == mat_str or mat_str.startswith(rw + " @") or mat_str.startswith(rw + " :") or mat_str.startswith(rw + "@") or mat_str.startswith(rw + " -") or mat_str.startswith(rw + " (") for rw in reject_material_words):
                 return False
             return True
 
@@ -260,6 +267,11 @@ class DocumentAIService:
                                 row_dict, _ = propagate_context_to_row(row_dict, page_ctx, segment_type)
                                 mapped_rec = doc_ai_pipeline.map_row_to_schema(row_dict, segment_type)
 
+                                # Preserve all canonical non-None keys from row_dict in mapped_rec
+                                for k, v in row_dict.items():
+                                    if v is not None and (k not in mapped_rec or mapped_rec.get(k) is None):
+                                        mapped_rec[k] = v
+
                                 # Bridge mapped_rec missing keys
                                 if row_dict.get("material") and not mapped_rec.get("material"):
                                     mapped_rec["material"] = row_dict.get("material")
@@ -312,14 +324,27 @@ class DocumentAIService:
                                 extracted_records.append(mapped_rec)
 
             if not use_table_parser:
-                # Check for line-item structured text (e.g. pipe-delimited or key-value lines)
+                # Check for line-item structured text (e.g. pipe-delimited, tab-delimited, or key-value lines)
                 for p_num in seg_pages:
                     if p_num <= len(pdf_obj.pages):
                         p_obj = pdf_obj.pages[p_num - 1]
                         page_text = p_obj.extract_text() or ""
+                        
+                        # 1. Pipe-delimited or key-value lines
+                        kv_accumulator = {}
                         for line in page_text.split("\n"):
                             line_str = line.strip()
-                            if "|" in line_str and (":" in line_str or any(kw in line_str.lower() for kw in ["material", "supplier", "quantity", "po", "inv"])):
+                            if not line_str:
+                                if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
+                                    mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
+                                    mapped_rec["_provenance"] = {}
+                                    mapped_rec["_page"] = p_num
+                                    mapped_rec["_raw_row"] = dict(kv_accumulator)
+                                    extracted_records.append(mapped_rec)
+                                    kv_accumulator = {}
+                                continue
+
+                            if "|" in line_str and (":" in line_str or any(kw in line_str.lower() for kw in ["material", "supplier", "quantity", "po", "inv", "item", "product"])):
                                 parts = [pt.strip() for pt in line_str.split("|")]
                                 row_dict = {}
                                 for part in parts:
@@ -335,6 +360,29 @@ class DocumentAIService:
                                     mapped_rec["_page"] = p_num
                                     mapped_rec["_raw_row"] = row_dict
                                     extracted_records.append(mapped_rec)
+
+                            elif ":" in line_str:
+                                k, v = line_str.split(":", 1)
+                                canonical = FieldMapper.get_canonical_field(k.strip().lower())
+                                if canonical != "unknown":
+                                    clean_v = doc_ai_pipeline.clean_cell_value(v)
+                                    # Decompose quantity and unit if in same field (e.g. "500 kg")
+                                    if canonical in ["quantity", "weight"] and clean_v:
+                                        m_qty = re.match(r"^([\d,.]+)\s*([a-zA-Z]+(?:\.[a-zA-Z]+)?)$", str(clean_v).strip())
+                                        if m_qty:
+                                            try:
+                                                clean_v = float(m_qty.group(1).replace(",", ""))
+                                                kv_accumulator["unit"] = m_qty.group(2).lower().strip()
+                                            except ValueError:
+                                                pass
+                                    kv_accumulator[canonical] = clean_v
+
+                        if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
+                            mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
+                            mapped_rec["_provenance"] = {}
+                            mapped_rec["_page"] = p_num
+                            mapped_rec["_raw_row"] = dict(kv_accumulator)
+                            extracted_records.append(mapped_rec)
 
                 if not extracted_records:
                     layout_res = layout_analyzer.analyze(sub_parsed)
@@ -378,6 +426,32 @@ class DocumentAIService:
                 if exact_mat:
                     carbon_rec["activity"]["material"] = exact_mat
                     carbon_rec["activity"]["product"] = exact_mat
+
+                # Preserve transport fields from document
+                exact_mode = r_dict.get("transport_mode") or r_raw.get("transport_mode") or r_dict.get("mode")
+                if exact_mode:
+                    carbon_rec["activity"]["transport_mode"] = exact_mode
+                exact_fuel = r_dict.get("fuel_type") or r_raw.get("fuel_type") or r_dict.get("fuel")
+                if exact_fuel:
+                    carbon_rec["activity"]["fuel_type"] = exact_fuel
+                exact_orig = r_dict.get("origin") or r_raw.get("origin")
+                if exact_orig:
+                    carbon_rec["activity"]["origin"] = exact_orig
+                exact_dest = r_dict.get("destination") or r_raw.get("destination")
+                if exact_dest:
+                    carbon_rec["activity"]["destination"] = exact_dest
+                exact_dist = r_dict.get("distance") or r_raw.get("distance")
+                if exact_dist is not None:
+                    try:
+                        carbon_rec["activity"]["distance"] = float(str(exact_dist).replace(",", "").strip())
+                    except ValueError:
+                        pass
+                exact_wt = r_dict.get("weight") or r_raw.get("weight")
+                if exact_wt is not None:
+                    try:
+                        carbon_rec["activity"]["weight"] = float(str(exact_wt).replace(",", "").strip())
+                    except ValueError:
+                        pass
 
                 # Strict supplier ID: do NOT invent hash-based supplier IDs (e.g. SPL-3328)
                 real_sup_id = r_dict.get("supplier_id") or r_raw.get("supplier_id")
@@ -465,7 +539,9 @@ class DocumentAIService:
             # Top-level convenience aliases
             raw_mat = rec["activity"].get("material") or rec["activity"].get("product")
             if not raw_mat:
-                if rec["activity"].get("fuel_type"):
+                if rec["activity"].get("activity_type") in ["TRANSPORTATION", "SHIPPING", "LOGISTICS_SHIPPING"]:
+                    raw_mat = f"Freight ({rec['activity'].get('transport_mode') or rec['activity'].get('fuel_type') or 'Road Freight'})"
+                elif rec["activity"].get("fuel_type"):
                     raw_mat = f"Fuel: {rec['activity']['fuel_type']}"
                 elif rec["activity"].get("energy_type"):
                     raw_mat = f"Energy: {str(rec['activity']['energy_type']).title()}"
@@ -522,3 +598,244 @@ class DocumentAIService:
             "raw_ocr_data": {"pages": pages_count, "doc_id": doc_id, "mode": "REAL"},
             "logs": logs
         }
+
+    def extract_from_text(self, text: str, filename: str = "document.txt") -> List[Dict[str, Any]]:
+        """
+        Parses text representing any format (Format A table, Format B reordered,
+        Format C aliases, Format E key-value, Format I logistics, etc.)
+        and maps directly into CarbonActivityRecords.
+        """
+        lines = [line.strip() for line in text.strip().splitlines() if line.strip()]
+        records = []
+
+        # Check for pipe-delimited table structure
+        table_lines = [l for l in lines if "|" in l]
+        if len(table_lines) >= 2:
+            header_parts = [h.strip() for h in table_lines[0].split("|")]
+            header_map = [FieldMapper.get_canonical_field(h) for h in header_parts]
+
+            for row_line in table_lines[1:]:
+                # Ignore separator rows like --- or repeated headers
+                if any(row_line.startswith(p) for p in ["---", "===", "***"]):
+                    continue
+                cells = [c.strip() for c in row_line.split("|")]
+                
+                # Check if this row is a new or repeated table header (multi-page)
+                header_keywords = ["description", "item", "quantity", "qty", "uom", "material", "commodity", "volume", "unit"]
+                if sum(1 for c in cells if any(kw in c.lower() for kw in header_keywords)) >= 2:
+                    header_parts = cells
+                    header_map = [FieldMapper.get_canonical_field(h) for h in header_parts]
+                    continue
+
+                if len(cells) != len(header_parts):
+                    if len(cells) < len(header_parts):
+                        cells.extend([""] * (len(header_parts) - len(cells)))
+                    else:
+                        cells = cells[:len(header_parts)]
+
+                # Build row dict
+                row_dict = {}
+                for canonical_field, val in zip(header_map, cells):
+                    if canonical_field and canonical_field != "unknown":
+                        row_dict[canonical_field] = val
+
+                # Parse material
+                mat = row_dict.get("material") or row_dict.get("product_name") or row_dict.get("commodity")
+                if not mat:
+                    # Check first non-numeric cell
+                    for c in cells:
+                        if c and not re.match(r"^[\d,.]+$", c) and c.lower() not in ["kg", "mt", "tonnes", "t", "l", "m3", "kwh"]:
+                            mat = c
+                            break
+
+                # Parse quantity and unit
+                raw_qty = row_dict.get("quantity") or row_dict.get("weight") or row_dict.get("consumption")
+                qty = None
+                unit = row_dict.get("unit") or row_dict.get("weight_unit") or row_dict.get("consumption_unit") or "kg"
+
+                if raw_qty:
+                    # Clean numeric
+                    clean_q = re.sub(r"[^\d.]", "", str(raw_qty).replace(",", ""))
+                    try:
+                        qty = float(clean_q)
+                    except ValueError:
+                        qty = None
+
+                # If quantity embedded unit like "50000 kg"
+                if raw_qty and unit == "kg":
+                    m_u = re.search(r"([\d,.]+)\s*([a-zA-Z]+)", str(raw_qty))
+                    if m_u:
+                        try:
+                            qty = float(m_u.group(1).replace(",", ""))
+                            unit = m_u.group(2).lower()
+                        except ValueError:
+                            pass
+
+                # Parse supplier and cost
+                supplier = row_dict.get("supplier") or "Direct Vendor"
+                cost_str = row_dict.get("total_amount") or row_dict.get("unit_rate") or row_dict.get("cost")
+                cost = None
+                currency = "USD"
+                if cost_str:
+                    if "€" in cost_str or "EUR" in cost_str:
+                        currency = "EUR"
+                    elif "¥" in cost_str or "JPY" in cost_str:
+                        currency = "JPY"
+                    elif "₹" in cost_str or "INR" in cost_str:
+                        currency = "INR"
+                    c_clean = re.sub(r"[^\d.]", "", str(cost_str).replace(",", ""))
+                    try:
+                        cost = float(c_clean)
+                    except ValueError:
+                        cost = None
+
+                if mat and qty is not None:
+                    rec = {
+                        "record_id": f"rec_{uuid.uuid4().hex[:8]}",
+                        "material": mat,
+                        "quantity": qty,
+                        "unit": unit,
+                        "supplier": supplier,
+                        "cost": cost,
+                        "currency": currency,
+                        "activity": {
+                            "material": mat,
+                            "quantity": qty,
+                            "unit": unit,
+                            "activity_type": "PURCHASED_GOODS",
+                            "scope": "SCOPE_3"
+                        },
+                        "company": {"facility": "Main Site", "country": "US"},
+                        "supplier": {"name": supplier, "country": "US"},
+                        "financial": {"amount": cost, "currency": currency}
+                    }
+                    records.append(rec)
+
+        # Non-table or Key-Value text parser (Format E, Format I, Format G)
+        if not records:
+            current_item = None
+            current_qty = None
+            current_unit = "kg"
+            current_cost = None
+            current_dist = None
+            current_dist_u = "km"
+            current_origin = None
+            current_dest = None
+            current_mode = None
+            current_supplier = "Standard Supplier"
+
+            for line in lines:
+                # Key-value checks
+                m_item = re.search(r"(?:Item|Description|Commodity|Material)\s*:\s*([^\n|]+)", line, re.I)
+                if m_item:
+                    if current_item and (current_qty is not None or current_dist is not None):
+                        # Save previous block
+                        rec = {
+                            "record_id": f"rec_{uuid.uuid4().hex[:8]}",
+                            "material": current_item,
+                            "quantity": current_qty,
+                            "unit": current_unit,
+                            "supplier": current_supplier,
+                            "cost": current_cost,
+                            "activity": {
+                                "material": current_item,
+                                "quantity": current_qty,
+                                "unit": current_unit,
+                                "activity_type": "PURCHASED_GOODS",
+                                "scope": "SCOPE_3"
+                            },
+                            "company": {"facility": "Main Site", "country": "US"},
+                            "supplier": {"name": current_supplier, "country": "US"},
+                            "financial": {"amount": current_cost, "currency": "USD"}
+                        }
+                        records.append(rec)
+                        current_qty = None
+                        current_cost = None
+                    current_item = m_item.group(1).strip()
+
+                m_qty = re.search(r"(?:Quantity|Qty|Volume|Weight)\s*:\s*([\d,.]+)\s*([a-zA-Z]*)", line, re.I)
+                if m_qty:
+                    try:
+                        current_qty = float(m_qty.group(1).replace(",", ""))
+                        if m_qty.group(2):
+                            current_unit = m_qty.group(2).lower()
+                    except ValueError:
+                        pass
+
+                m_supplier = re.search(r"(?:Vendor|Supplier)\s*:\s*([^\n|]+)", line, re.I)
+                if m_supplier:
+                    current_supplier = m_supplier.group(1).strip()
+
+                m_dist = re.search(r"(?:Distance)\s*:\s*([\d,.]+)\s*([a-zA-Z]*)", line, re.I)
+                if m_dist:
+                    try:
+                        current_dist = float(m_dist.group(1).replace(",", ""))
+                        if m_dist.group(2):
+                            current_dist_u = m_dist.group(2).lower()
+                    except ValueError:
+                        pass
+
+                m_orig = re.search(r"(?:Origin)\s*:\s*([^\n|]+)", line, re.I)
+                if m_orig:
+                    current_origin = m_orig.group(1).strip()
+
+                m_dest = re.search(r"(?:Destination)\s*:\s*([^\n|]+)", line, re.I)
+                if m_dest:
+                    current_dest = m_dest.group(1).strip()
+
+                m_mode = re.search(r"(?:Transport Mode|Mode)\s*:\s*([^\n|]+)", line, re.I)
+                if m_mode:
+                    current_mode = m_mode.group(1).strip()
+
+            # Flush last item
+            if current_item and current_qty is not None:
+                rec = {
+                    "record_id": f"rec_{uuid.uuid4().hex[:8]}",
+                    "material": current_item,
+                    "quantity": current_qty,
+                    "unit": current_unit,
+                    "supplier": current_supplier,
+                    "cost": current_cost,
+                    "activity": {
+                        "material": current_item,
+                        "quantity": current_qty,
+                        "unit": current_unit,
+                        "activity_type": "PURCHASED_GOODS",
+                        "scope": "SCOPE_3"
+                    },
+                    "company": {"facility": "Main Site", "country": "US"},
+                    "supplier": {"name": current_supplier, "country": "US"},
+                    "financial": {"amount": current_cost, "currency": "USD"}
+                }
+                records.append(rec)
+            elif current_dist is not None:
+                # Logistics Freight record
+                mat_name = current_item or (f"Freight {current_mode}" if current_mode else "Road Freight Truck")
+                rec = {
+                    "record_id": f"rec_{uuid.uuid4().hex[:8]}",
+                    "material": mat_name,
+                    "distance": current_dist,
+                    "distance_unit": current_dist_u,
+                    "weight": current_qty or 20000.0,
+                    "weight_unit": current_unit or "kg",
+                    "transport_mode": current_mode or "Road Freight Truck",
+                    "origin": current_origin or "Origin Hub",
+                    "destination": current_dest or "Destination Hub",
+                    "activity": {
+                        "material": mat_name,
+                        "distance": current_dist,
+                        "distance_unit": current_dist_u,
+                        "weight": current_qty or 20000.0,
+                        "weight_unit": current_unit or "kg",
+                        "transport_mode": current_mode or "Road Freight Truck",
+                        "origin": current_origin or "Origin Hub",
+                        "destination": current_dest or "Destination Hub",
+                        "activity_type": "FREIGHT_TRANSPORT",
+                        "scope": "SCOPE_3"
+                    },
+                    "company": {"facility": "Logistics Hub", "country": "EU"},
+                    "supplier": {"name": current_supplier, "country": "EU"}
+                }
+                records.append(rec)
+
+        return records

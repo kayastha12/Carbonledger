@@ -180,6 +180,155 @@ class WorkbookFactorEngine:
 
         return results
 
+    def extract_material_attributes(self, mat_str: str) -> Dict[str, Any]:
+        """
+        Extracts material family, canonical category, material form, and production route
+        from raw description without mutating the raw text.
+        """
+        if not mat_str:
+            return {"raw": "", "route": "Primary material production", "l2": None, "l3": None}
+        
+        m_raw = str(mat_str).strip()
+        m_low = m_raw.lower()
+
+        # 1. Route extraction
+        if any(k in m_low for k in ["closed-loop", "closed loop", "rpet", "(recycled)", "recycled", "cullet"]):
+            col_text = "Closed-loop source"
+        elif any(k in m_low for k in ["re-used", "reused"]):
+            col_text = "Re-used"
+        elif any(k in m_low for k in ["open-loop", "open loop"]):
+            col_text = "Open-loop source"
+        elif any(k in m_low for k in ["primary", "virgin"]):
+            col_text = "Primary material production"
+        else:
+            col_text = "Primary material production"
+
+        # 2. Canonical mapping to workbook Level 2 and Level 3
+        target_l2 = None
+        target_l3 = None
+
+        # Construction metals (Structural steel / section / plates / generic steel)
+        if "structural steel" in m_low or "steel section" in m_low or "structural metal" in m_low or "steel plate" in m_low or m_low in ["steel", "metals", "metal", "construction steel"]:
+            target_l2 = "Construction"
+            target_l3 = "Metals"
+        elif "tinplate" in m_low or "can bodies" in m_low or ("steel" in m_low and "can" in m_low):
+            target_l2 = "Metal"
+            target_l3 = "Metal: steel cans"
+        elif "scrap metal" in m_low or "metal scrap" in m_low:
+            target_l2 = "Metal"
+            target_l3 = "Metal: scrap metal"
+        elif "mixed metal can" in m_low or "mixed can" in m_low:
+            target_l2 = "Metal"
+            target_l3 = "Metal: mixed cans"
+        elif "aluminium" in m_low or "aluminum" in m_low:
+            if m_low in ["aluminium", "aluminum", "generic aluminium", "generic aluminum", "raw aluminium", "raw aluminum"]:
+                target_l2 = None
+                target_l3 = None
+            else:
+                target_l2 = "Metal"
+                target_l3 = "Metal: aluminium cans and foil (excl. forming)"
+        elif "hdpe" in m_low or "high-density polyethylene" in m_low:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: HDPE (incl. forming)"
+        elif "lldpe" in m_low or "ldpe" in m_low or "linear low-density" in m_low:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: LDPE and LLDPE (incl. forming)"
+        elif "rpet" in m_low or "pet resin" in m_low or ("pet" in m_low and "forming" in m_low) or ("polyethylene terephthalate" in m_low):
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: PET (incl. forming)"
+        elif "polypropylene" in m_low or " pp " in f" {m_low} ":
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: PP (incl. forming)"
+        elif "polystyrene" in m_low or " ps " in f" {m_low} ":
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: PS (incl. forming)"
+        elif "pvc" in m_low or "polyvinyl chloride" in m_low:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: PVC (incl. forming)"
+        elif "plastic film" in m_low:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: average plastic film"
+        elif "rigid plastic" in m_low or "moulding compound" in m_low:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: average plastic rigid"
+        elif "plastic resin" in m_low:
+            # Generic plastic resin without specific polymer grade requires review
+            target_l2 = None
+            target_l3 = None
+        elif "plastic granules" in m_low or m_low in ["plastic", "plastics", "mixed plastics", "average plastic", "average plastics"]:
+            target_l2 = "Plastic"
+            target_l3 = "Plastics: average plastics"
+        elif "corrugated board" in m_low or ("board" in m_low and "paper" not in m_low and "insulation" not in m_low and "plaster" not in m_low):
+            target_l2 = "Paper"
+            target_l3 = "Paper and board: board"
+        elif "kraft paper" in m_low or ("paper" in m_low and "board" not in m_low and "mixed" not in m_low):
+            target_l2 = "Paper"
+            target_l3 = "Paper and board: paper"
+        elif "mixed paper" in m_low or ("paper" in m_low and "board" in m_low):
+            target_l2 = "Paper"
+            target_l3 = "Paper and board: mixed"
+        elif "refrigeration" in m_low or "cooling unit" in m_low or "fridge" in m_low or "freezer" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Electrical items - fridges and freezers"
+        elif "large electrical" in m_low or "appliance sub-assembly" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Electrical items - large"
+        elif "it hardware" in m_low or "control pc" in m_low or "computer" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Electrical items - IT"
+        elif "small electrical" in m_low or "electrical components" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Electrical items - small"
+        elif "alkaline battery" in m_low or "batteries - alkaline" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Batteries - Alkaline"
+        elif "lithium" in m_low or "li ion" in m_low or "li-ion" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Batteries - Li ion"
+        elif "nimh" in m_low or "ni-mh" in m_low:
+            target_l2 = "Electrical items"
+            target_l3 = "Batteries - NiMh"
+        elif "glass" in m_low:
+            target_l2 = "Other"
+            target_l3 = "Glass"
+        elif "sand" in m_low or "aggregate" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Aggregates"
+        elif "brick" in m_low or "refractory" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Bricks"
+        elif "concrete" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Concrete"
+        elif "insulation" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Insulation"
+        elif "mineral oil" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Mineral oil"
+        elif "plasterboard" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Plasterboard"
+        elif "tyre" in m_low or "tire" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Tyres"
+        elif "pallet" in m_low or "timber" in m_low or "wood" in m_low:
+            target_l2 = "Construction"
+            target_l3 = "Wood"
+        elif "clothing" in m_low or "textile" in m_low:
+            target_l2 = "Other"
+            target_l3 = "Clothing"
+        elif "food" in m_low or "drink" in m_low:
+            target_l2 = "Other"
+            target_l3 = "Food and drink"
+
+        return {
+            "raw": m_raw,
+            "route": col_text,
+            "l2": target_l2,
+            "l3": target_l3
+        }
+
     def evaluate_activity(self, rec: Dict[str, Any]) -> Dict[str, Any]:
         """
         Evaluates an extracted activity record against the authoritative workbook.
@@ -246,7 +395,6 @@ class WorkbookFactorEngine:
                     factor = self.factors_by_id.get("1_100_1003_15_1") or self.find_factors(search_text="LPG", uom="tonnes")
                     f_obj = factor if isinstance(factor, WorkbookFactor) else (factor[0] if factor else None)
                     if f_obj and qty is not None:
-                        # 100 kg = 0.1 tonne
                         tonnes = float(qty) / 1000.0 if u_str == "kg" else float(qty)
                         val = tonnes * f_obj.conversion_factor
                         return {
@@ -276,7 +424,7 @@ class WorkbookFactorEngine:
                     }
 
         # 3. Case: TRANSPORTATION (Scope 3 Freight)
-        if act_type in ["TRANSPORTATION", "LOGISTICS_SHIPPING", "SHIPPING_MANIFEST"]:
+        if act_type in ["TRANSPORTATION", "LOGISTICS_SHIPPING", "SHIPPING_MANIFEST"] or mode:
             mode_str = str(mode or "").lower().strip()
 
             # 3a. Rail Freight
@@ -284,7 +432,6 @@ class WorkbookFactorEngine:
                 factor = self.factors_by_id.get("27_315_3151_14_1") or self.find_factors(category="Freighting goods", search_text="Freight train", uom="tonne.km")
                 f_obj = factor if isinstance(factor, WorkbookFactor) else (factor[0] if factor else None)
                 if f_obj and wt is not None and dist is not None:
-                    # Convert weight to tonnes if kg
                     wt_tonnes = float(wt) / 1000.0 if str(wt_unit).lower().strip() in ["kg", "g"] else float(wt)
                     dist_km = float(dist)
                     tonne_km = wt_tonnes * dist_km
@@ -300,18 +447,99 @@ class WorkbookFactorEngine:
                         "match_method": "exact_freight_rail_match"
                     }
 
-            # 3b. Truck Freight (Vehicle class / loading unstated)
-            elif "truck" in mode_str or "road" in mode_str or "hgv" in mode_str:
-                return {
-                    "calculation_status": "REVIEW_REQUIRED",
-                    "calculation_ready": False,
-                    "reason": f"Truck transportation ({wt} {wt_unit}, {dist} {dist_unit}) requires vehicle class and loading condition specification in workbook.",
-                    "factor": None,
-                    "formula": "Pending Vehicle Class / Laden State Specification",
-                    "emission_kgco2e": 0.0,
-                    "confidence": 0.85,
-                    "match_method": "truck_class_review"
-                }
+            # 3b. Road / HGV Freight
+            elif "truck" in mode_str or "road" in mode_str or "hgv" in mode_str or "freight" in mode_str:
+                # If mode is single generic keyword 'truck' with only weight/dist and no class or context, require review
+                if mode_str == "truck":
+                    return {
+                        "calculation_status": "REVIEW_REQUIRED",
+                        "calculation_ready": False,
+                        "reason": f"Truck transportation ({wt} {wt_unit}, {dist} {dist_unit}) requires vehicle class specification in workbook.",
+                        "factor": None,
+                        "formula": "Pending Vehicle Class Specification",
+                        "emission_kgco2e": 0.0,
+                        "confidence": 0.85,
+                        "match_method": "truck_class_review"
+                    }
+
+                # Resolve vehicle category and loading condition
+                target_l2 = "HGV (refrigerated, all diesel)" if "refrigerated" in mode_str and "non-refrigerated" not in mode_str else "HGV (non-refrigerated, all diesel)"
+                
+                if "articulated" in mode_str or "artic" in mode_str:
+                    target_l3 = "Articulated (>3.5 - 33t)" if (">3.5" in mode_str or "33" in mode_str) else "Articulated (>33t)"
+                elif "rigid" in mode_str:
+                    if ">3.5 - 7.5" in mode_str or "7.5" in mode_str:
+                        target_l3 = "Rigid (>3.5 - 7.5 tonnes)"
+                    elif ">7.5 - 17" in mode_str or "17" in mode_str:
+                        target_l3 = "Rigid (>7.5 tonnes-17 tonnes)"
+                    else:
+                        target_l3 = "Rigid (>17 tonnes)"
+                else:
+                    target_l3 = "All HGVs"
+
+                # Loading condition: Check 100% and 50% BEFORE 0% to prevent substring match bugs
+                if "100%" in mode_str or "100% laden" in mode_str:
+                    col_text = "100% Laden"
+                elif "50%" in mode_str or "50% laden" in mode_str:
+                    col_text = "50% Laden"
+                elif "0%" in mode_str or "unladen" in mode_str or "0% laden" in mode_str:
+                    col_text = "0% Laden"
+                else:
+                    col_text = "Average laden"
+
+                # Look up matching tonne.km factor
+                matched_factor = None
+                for f in self.flat_factors:
+                    if f.level_1 == "Freighting goods" and f.ghg_unit == "kg CO2e" and f.uom == "tonne.km":
+                        if f.level_2.lower() == target_l2.lower() and f.level_3.lower() == target_l3.lower() and f.column_text.lower() == col_text.lower():
+                            matched_factor = f
+                            break
+
+                if not matched_factor:
+                    # Fallback lookup in same vehicle class
+                    for f in self.flat_factors:
+                        if f.level_1 == "Freighting goods" and f.ghg_unit == "kg CO2e" and f.uom == "tonne.km":
+                            if "articulated" in f.level_3.lower() and col_text.lower() in f.column_text.lower():
+                                matched_factor = f
+                                break
+
+                if matched_factor and wt is not None and dist is not None:
+                    wt_tonnes = float(wt) / 1000.0 if str(wt_unit).lower().strip() in ["kg", "g"] else float(wt)
+                    dist_km = float(dist)
+                    tonne_km = round(wt_tonnes * dist_km, 4)
+                    val = round(tonne_km * matched_factor.conversion_factor, 4)
+                    return {
+                        "calculation_status": "READY",
+                        "calculation_ready": True,
+                        "reason": None,
+                        "factor": matched_factor.to_dict(),
+                        "formula": f"{tonne_km} tonne.km × {matched_factor.conversion_factor} kg CO2e/tonne.km ({wt_tonnes} t × {dist_km} km)",
+                        "emission_kgco2e": val,
+                        "confidence": 1.0,
+                        "match_method": "exact_freight_hgv_match"
+                    }
+                elif wt is None or dist is None:
+                    return {
+                        "calculation_status": "MISSING_REQUIRED_DATA",
+                        "calculation_ready": False,
+                        "reason": f"Transport record requires weight and distance for carbon calculation (found weight={wt}, dist={dist}).",
+                        "factor": matched_factor.to_dict() if matched_factor else None,
+                        "formula": "Missing Weight / Distance Parameter",
+                        "emission_kgco2e": 0.0,
+                        "confidence": 0.0,
+                        "match_method": "missing_transport_metrics"
+                    }
+                else:
+                    return {
+                        "calculation_status": "REVIEW_REQUIRED",
+                        "calculation_ready": False,
+                        "reason": f"Truck transportation ({wt} {wt_unit}, {dist} {dist_unit}) requires vehicle class specification in workbook.",
+                        "factor": None,
+                        "formula": "Pending Vehicle Class Specification",
+                        "emission_kgco2e": 0.0,
+                        "confidence": 0.85,
+                        "match_method": "truck_class_review"
+                    }
 
         # 4. Case: ELECTRICITY_CONSUMPTION
         if act_type in ["ELECTRICITY_CONSUMPTION", "ELECTRICITY_GRID"] or (nrg and "electricity" in str(nrg).lower()):
@@ -358,52 +586,100 @@ class WorkbookFactorEngine:
                 }
 
         # 7. Case: PURCHASED_GOODS / MATERIAL_CONSUMPTION
-        if act_type in ["PURCHASED_GOODS", "MATERIAL_CONSUMPTION"]:
+        if act_type in ["PURCHASED_GOODS", "MATERIAL_CONSUMPTION"] or mat:
             mat_name = str(mat or "").strip()
-            
-            # Material use semantic match requires confirmation
-            if "steel" in mat_name.lower():
-                cand = self.factors_by_id.get("19_500_5007_15_1") or self.find_factors(category="Metal", search_text="steel cans", uom="tonnes")
-                f_obj = cand if isinstance(cand, WorkbookFactor) else (cand[0] if cand else None)
-                f_dict = f_obj.to_dict() if f_obj else None
+            attrs = self.extract_material_attributes(mat_name)
+            target_l2 = attrs.get("l2")
+            target_l3 = attrs.get("l3")
+            col_text = attrs.get("route", "Primary material production")
+
+            if target_l2 and target_l3:
+                # 1. Look for exact route match
+                matched_factor = None
+                for f in self.flat_factors:
+                    if f.level_1 == "Material use" and f.ghg_unit == "kg CO2e":
+                        if f.level_2.lower() == target_l2.lower() and f.level_3.lower() == target_l3.lower() and f.column_text.lower() == col_text.lower():
+                            matched_factor = f
+                            break
+
+                # 2. If closed-loop requested but not found, check if primary exists and mark review
+                if not matched_factor and col_text != "Primary material production":
+                    for f in self.flat_factors:
+                        if f.level_1 == "Material use" and f.ghg_unit == "kg CO2e":
+                            if f.level_2.lower() == target_l2.lower() and f.level_3.lower() == target_l3.lower():
+                                return {
+                                    "calculation_status": "REVIEW_REQUIRED",
+                                    "calculation_ready": False,
+                                    "reason": f"Compatible recycled factor unavailable in workbook for '{mat_name}'. Primary factor available ({f.conversion_factor} kg CO2e/t) but requires auditor review.",
+                                    "factor": f.to_dict(),
+                                    "formula": "Pending Recycled Factor Auditor Confirmation",
+                                    "emission_kgco2e": 0.0,
+                                    "confidence": 0.85,
+                                    "match_method": "recycled_factor_review"
+                                }
+
+                if matched_factor and qty is not None:
+                    u_low = str(unit or "kg").lower().strip()
+                    if u_low in ["kg", "g", "lb", "pounds"]:
+                        tonnes = (float(qty) * 0.001) if u_low == "kg" else (float(qty) * 0.000453592 if u_low in ["lb", "pounds"] else float(qty) * 1e-6)
+                    else:
+                        tonnes = float(qty)
+                    
+                    val = round(tonnes * matched_factor.conversion_factor, 4)
+                    return {
+                        "calculation_status": "READY",
+                        "calculation_ready": True,
+                        "reason": None,
+                        "factor": matched_factor.to_dict(),
+                        "formula": f"{tonnes} tonne × {matched_factor.conversion_factor} kg CO2e/tonne (converted from {float(qty)} {unit or 'kg'})",
+                        "emission_kgco2e": val,
+                        "confidence": 1.0,
+                        "match_method": "exact_workbook_material_match"
+                    }
+                elif qty is None:
+                    return {
+                        "calculation_status": "MISSING_REQUIRED_DATA",
+                        "calculation_ready": False,
+                        "reason": f"Material '{mat_name}' is missing quantity.",
+                        "factor": matched_factor.to_dict() if matched_factor else None,
+                        "formula": "Missing Quantity",
+                        "emission_kgco2e": 0.0,
+                        "confidence": 0.0,
+                        "match_method": "missing_quantity_guard"
+                    }
+
+            # If not matched canonically, evaluate semantic candidates strictly without guessing across categories
+            cand_factors = []
+            m_low = mat_name.lower()
+            for f in self.flat_factors:
+                if f.level_1 == "Material use" and f.ghg_unit == "kg CO2e" and f.conversion_factor > 0:
+                    desc = f"{f.level_2} {f.level_3}".lower()
+                    if any(w in desc for w in m_low.split() if len(w) > 4):
+                        cand_factors.append(f)
+
+            if cand_factors:
+                cand = cand_factors[0]
                 return {
                     "calculation_status": "REVIEW_REQUIRED",
                     "calculation_ready": False,
-                    "reason": f"No exact emission factor for '{mat_name}' is available in workbook. Semantic candidate 'Metal: steel cans' requires auditor review.",
-                    "factor": f_dict,
+                    "reason": f"No exact emission factor for '{mat_name}' in workbook. Semantic candidate '{cand.level_2}: {cand.level_3}' requires auditor review.",
+                    "factor": cand.to_dict(),
                     "formula": "Pending Material Mapping Confirmation",
                     "emission_kgco2e": 0.0,
-                    "confidence": 0.85,
+                    "confidence": 0.80,
                     "match_method": "semantic_material_review"
                 }
-            elif "alumin" in mat_name.lower():
-                cand = self.factors_by_id.get("19_500_5009_15_1") or self.find_factors(category="Metal", search_text="aluminium cans", uom="tonnes")
-                f_obj = cand if isinstance(cand, WorkbookFactor) else (cand[0] if cand else None)
-                f_dict = f_obj.to_dict() if f_obj else None
-                return {
-                    "calculation_status": "REVIEW_REQUIRED",
-                    "calculation_ready": False,
-                    "reason": f"No exact emission factor for '{mat_name}' is available in workbook. Semantic candidate 'Metal: aluminium cans and foil' requires auditor review.",
-                    "factor": f_dict,
-                    "formula": "Pending Material Mapping Confirmation",
-                    "emission_kgco2e": 0.0,
-                    "confidence": 0.85,
-                    "match_method": "semantic_material_review"
-                }
-            elif "plastic" in mat_name.lower():
-                cand = self.factors_by_id.get("19_500_5015_15_1") or self.find_factors(category="Plastics", search_text="average plastics", uom="tonnes")
-                f_obj = cand if isinstance(cand, WorkbookFactor) else (cand[0] if cand else None)
-                f_dict = f_obj.to_dict() if f_obj else None
-                return {
-                    "calculation_status": "REVIEW_REQUIRED",
-                    "calculation_ready": False,
-                    "reason": f"No exact emission factor for '{mat_name}' is available in workbook. Semantic candidate 'Plastics: average plastics' requires auditor review.",
-                    "factor": f_dict,
-                    "formula": "Pending Material Mapping Confirmation",
-                    "emission_kgco2e": 0.0,
-                    "confidence": 0.85,
-                    "match_method": "semantic_material_review"
-                }
+
+            return {
+                "calculation_status": "FACTOR_NOT_FOUND",
+                "calculation_ready": False,
+                "reason": f"No compatible emission factor found in authoritative workbook for material '{mat_name}'. Guessing blocked.",
+                "factor": None,
+                "formula": "Factor Not Found",
+                "emission_kgco2e": 0.0,
+                "confidence": 0.0,
+                "match_method": "no_match_guard"
+            }
 
         # 8. Default Unmapped Activity
         return {
@@ -416,3 +692,4 @@ class WorkbookFactorEngine:
             "confidence": 0.0,
             "match_method": "no_match"
         }
+

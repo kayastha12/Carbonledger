@@ -11,60 +11,82 @@ export default function DashboardTab({
   themeCard,
   themeBorder,
   themeText,
-  themeSubtext
+  themeSubtext,
+  reviewedRecords = [],
+  universalStatus = 'idle'
 }) {
-  const hasUpload = Boolean(universalResult && universalResult.records && universalResult.records.length > 0);
+  const records = universalResult?.records || universalResult?.inventory_records || [];
   const summary = universalResult?.summary || {};
+  
+  // Gating rule: Calculation metrics exist ONLY if approved and calculated
+  const hasApprovedUpload = Boolean(
+    universalResult &&
+    records.length > 0 &&
+    (universalResult.status === 'calculated' || summary.rows_calculated > 0 || (summary.total_co2e_kg != null && summary.total_co2e_kg > 0))
+  );
+  
+  const hasPendingReview = !hasApprovedUpload && (reviewedRecords.length > 0 || universalStatus === 'parsed');
 
-  const docsProcessed = hasUpload ? (summary.documents_processed ?? 1) : 0;
-  const lineItemsExtracted = hasUpload ? (summary.rows_extracted ?? universalResult.records.length) : 0;
-  const totalCo2eKg = hasUpload ? (summary.total_co2e_kg ?? 0) : 0;
-  const totalCo2eTonnes = hasUpload ? (summary.total_co2e_tonnes ?? (totalCo2eKg / 1000.0)) : 0;
-  const totalCbamCost = hasUpload ? (summary.total_cbam_cost_eur ?? 0) : 0;
+  // KPI Calculations strictly from approved calculation data
+  const docsProcessed = hasApprovedUpload ? (summary.documents_processed ?? 1) : 0;
+  const lineItemsExtracted = hasApprovedUpload ? (summary.rows_extracted ?? records.length) : 0;
+  const rowsCalculated = hasApprovedUpload ? (summary.rows_calculated ?? records.filter(r => r.calculation_status === 'Calculated').length) : 0;
+  const rowsManualReview = hasApprovedUpload ? (summary.rows_manual_review ?? (lineItemsExtracted - rowsCalculated)) : 0;
+  
+  const totalCo2eKg = hasApprovedUpload ? (summary.total_co2e_kg ?? 0) : 0;
+  const totalCo2eTonnes = hasApprovedUpload ? (summary.total_co2e_tonnes ?? (totalCo2eKg / 1000.0)) : 0;
+  const totalCbamCost = hasApprovedUpload ? (summary.total_cbam_cost_eur ?? 0) : 0;
 
-  const hasConfidence = hasUpload && universalResult.ai_confidence != null && universalResult.ai_confidence > 0;
-  const aiConfidenceVal = hasConfidence ? `${Number(universalResult.ai_confidence).toFixed(1)}%` : '—';
-  const aiConfidenceSub = hasConfidence ? 'Live OCR Confidence' : 'No active scan';
+  const hasConfidence = hasApprovedUpload && (universalResult.ai_confidence != null || summary.overall_confidence_pct != null);
+  const aiConfidenceVal = hasConfidence ? `${Number(universalResult.ai_confidence || summary.overall_confidence_pct).toFixed(1)}%` : 'N/A';
+  const aiConfidenceSub = hasConfidence ? 'Audited Extraction Confidence' : 'No document processed';
 
-  const rowsCalculated = summary.rows_calculated ?? 0;
-  let calcStatus = 'NO DATA';
-  let calcStatusSub = 'Awaiting document';
+  let calcStatus = 'No calculated data yet';
+  let calcStatusSub = '0 records';
   let calcStatusColor = '#64748b';
+  let calcStatusIcon = '⚪';
 
-  if (hasUpload) {
-    if (universalResult.status === 'parsed' || rowsCalculated === 0) {
-      calcStatus = 'PENDING';
-      calcStatusSub = 'Awaiting Review Approval';
+  if (hasApprovedUpload) {
+    if (rowsManualReview > 0) {
+      calcStatus = 'Calculated with Review Required';
+      calcStatusSub = `${rowsCalculated} calculated, ${rowsManualReview} review required`;
       calcStatusColor = '#f59e0b';
+      calcStatusIcon = '⚠️';
     } else {
-      calcStatus = 'AUDITED';
+      calcStatus = 'Calculated';
       calcStatusSub = `${rowsCalculated} of ${lineItemsExtracted} Factors Matched`;
       calcStatusColor = '#10b981';
+      calcStatusIcon = '✅';
     }
+  } else if (hasPendingReview) {
+    calcStatus = 'Pending Review';
+    calcStatusSub = 'Awaiting calculation approval';
+    calcStatusColor = '#f59e0b';
+    calcStatusIcon = '⏳';
   }
 
-  const scope1Kg = hasUpload ? (summary.scope_1_co2e_kg ?? 0) : 0;
-  const scope2Kg = hasUpload ? (summary.scope_2_co2e_kg ?? 0) : 0;
-  const scope3Kg = hasUpload ? (summary.scope_3_co2e_kg ?? 0) : 0;
+  const scope1Kg = hasApprovedUpload ? (summary.scope_1_co2e_kg ?? 0) : 0;
+  const scope2Kg = hasApprovedUpload ? (summary.scope_2_co2e_kg ?? 0) : 0;
+  const scope3Kg = hasApprovedUpload ? (summary.scope_3_co2e_kg ?? 0) : 0;
 
   const kpis = [
     {
       label: 'Documents Processed',
       val: docsProcessed,
-      sub: hasUpload ? 'In Current Session' : 'No uploads yet',
+      sub: hasApprovedUpload ? 'In Current Session' : '0 documents',
       icon: '📄',
       color: '#3b82f6'
     },
     {
       label: 'Extracted Line Items',
       val: lineItemsExtracted,
-      sub: hasUpload ? 'Real Extracted Rows' : '0 records',
+      sub: hasApprovedUpload ? `${rowsCalculated} Calculated` : '0 records',
       icon: '📊',
       color: '#10b981'
     },
     {
       label: 'Total Footprint',
-      val: `${totalCo2eKg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg`,
+      val: `${totalCo2eKg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg CO2e`,
       sub: `${totalCo2eTonnes.toFixed(3)} tonnes CO₂e`,
       icon: '🌍',
       color: '#f59e0b'
@@ -87,7 +109,7 @@ export default function DashboardTab({
       label: 'Calculation Status',
       val: calcStatus,
       sub: calcStatusSub,
-      icon: calcStatus === 'AUDITED' ? '✅' : (calcStatus === 'PENDING' ? '⏳' : '⚪'),
+      icon: calcStatusIcon,
       color: calcStatusColor
     }
   ];
@@ -149,27 +171,6 @@ export default function DashboardTab({
         </div>
       </div>
 
-      {/* No Document Callout if zero uploads */}
-      {!hasUpload && (
-        <div style={{
-          backgroundColor: themeCard, border: `1px dashed ${themeBorder}`, borderRadius: '18px',
-          padding: '32px 24px', textAlign: 'center'
-        }}>
-          <div style={{ fontSize: '32px', marginBottom: '12px' }}>📂</div>
-          <h4 style={{ fontSize: '16px', fontWeight: '800', margin: '0 0 6px 0', color: themeText }}>
-            No Carbon Documents Uploaded in Current Session
-          </h4>
-          <p style={{ fontSize: '13px', color: themeSubtext, maxWidth: '460px', margin: '0 auto 16px auto', lineHeight: 1.5 }}>
-            Upload utility invoices, purchase orders, or shipping manifests to compute live carbon footprints and CBAM exposure.
-          </p>
-          <button 
-            onClick={() => setActiveTab('Upload & Review')}
-            style={{ padding: '10px 20px', borderRadius: '10px', backgroundColor: '#3b82f6', color: '#ffffff', border: 'none', fontWeight: '800', fontSize: '13px', cursor: 'pointer', boxShadow: '0 4px 12px rgba(59,130,246,0.3)' }}>
-            Start Document Extraction (⚡ 15 Tokens)
-          </button>
-        </div>
-      )}
-
       {/* Recent Activity Log */}
       <div style={{ padding: '24px', borderRadius: '18px', backgroundColor: themeCard, border: `1px solid ${themeBorder}` }}>
         <h4 style={{ fontSize: '15px', fontWeight: '800', margin: '0 0 16px 0', color: themeText }}>📜 Recent Activity & Audit Timeline</h4>
@@ -193,5 +194,3 @@ export default function DashboardTab({
     </div>
   );
 }
-
-

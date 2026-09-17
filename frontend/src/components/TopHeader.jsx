@@ -18,7 +18,7 @@ export default function TopHeader({
           {activeTab === 'Dashboard' && 'Enterprise tenant GHG carbon accounting and CBAM compliance metrics'}
           {activeTab === 'Upload & Review' && 'Universal document intake with human-in-the-loop audit verification (⚡ 15 Tokens)'}
           {activeTab === 'Reports' && 'Download compliance CBAM declaration and GHG corporate inventory reports (⚡ 25 Tokens)'}
-          {activeTab === 'AI Intelligence' && 'AI Sustainability Copilot, what-if simulations, and CBAM forecasting'}
+          {activeTab === 'AI Intelligence' && 'AI Sustainability Copilot, verified factor provenance, and CBAM insights'}
           {activeTab === 'Subscription & Billing' && 'Manage enterprise subscription tiers, refill token quota, and view invoices'}
           {activeTab === 'Settings' && 'Workspace organization profile, emission factors region, and security'}
           {activeTab === 'Admin Console' && 'Platform governance, user management, manual token allocations, and audit trails'}
