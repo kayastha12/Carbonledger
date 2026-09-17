@@ -53,6 +53,22 @@ export default function ReportsTab({
 
   const reportCards = [
     { 
+      name: 'Auditable Calculation Records (CSV)', 
+      key: 'calculated_data_csv', 
+      defaultFilename: 'carbonledger_calculations.csv',
+      icon: '📥', 
+      type: 'Full Row-Level Calculation CSV', 
+      desc: 'Independent verification dataset matching Dashboard CO2e, Scope 1/2/3, factor formulas, and quantities.' 
+    },
+    { 
+      name: 'Auditable Calculation Records (Excel)', 
+      key: 'calculated_data_excel', 
+      defaultFilename: 'carbonledger_calculations.xlsx',
+      icon: '📗', 
+      type: 'Full Row-Level Calculation XLSX', 
+      desc: 'Formulas, factor lookups, units, and Scope breakdowns for spreadsheet auditing.' 
+    },
+    { 
       name: 'Official CBAM Declaration (Excel)', 
       key: 'cbam_report_excel', 
       defaultFilename: 'cbam_report.xlsx',

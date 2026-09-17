@@ -96,13 +96,32 @@ class ReportGeneratorService:
         # 6. Report Context Index (Machine-readable for AI Copilot)
         context_path = self._generate_report_context_json(upload_dir, df, sections, report_id, timestamp, upload_id)
 
+        # 7. Auditable Calculated Data CSV & Excel Export (Full Row-Level Records)
+        calc_csv_path = os.path.join(upload_dir, "calculated_data.csv")
+        calc_xlsx_path = os.path.join(upload_dir, "calculated_data.xlsx")
+        
+        # Build comprehensive audit export columns
+        export_df = df.copy()
+        for col_name in ["source_document", "invoice_number", "invoice_date", "supplier", "material", "quantity", "unit", "scope", "emission_factor", "formula", "co2e_kg", "calculation_status"]:
+            if col_name not in export_df.columns:
+                export_df[col_name] = "N/A"
+                
+        try:
+            export_df.to_csv(calc_csv_path, index=False)
+            with pd.ExcelWriter(calc_xlsx_path, engine="openpyxl") as writer:
+                export_df.to_excel(writer, index=False, sheet_name="Calculated Records")
+        except Exception as export_err:
+            print(f"Audit export generation note: {export_err}")
+
         return {
             "carbon_report_pdf": f"/api/reports/download?path={pdf_path}",
             "cbam_report_excel": f"/api/reports/download?path={cbam_path}",
             "inventory_excel": f"/api/reports/download?path={inventory_path}",
             "audit_json": f"/api/reports/download?path={audit_path}",
             "executive_esg_pdf": f"/api/reports/download?path={esg_path}",
-            "report_context_json": f"/api/reports/download?path={context_path}"
+            "report_context_json": f"/api/reports/download?path={context_path}",
+            "calculated_data_csv": f"/api/calculations/download?upload_id={upload_id}&format=csv",
+            "calculated_data_excel": f"/api/calculations/download?upload_id={upload_id}&format=xlsx"
         }
 
     # ---------------------------------------------------------------

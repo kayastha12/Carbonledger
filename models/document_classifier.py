@@ -3,6 +3,11 @@ import json
 import time
 from typing import Dict, Any
 
+try:
+    import torch
+except ImportError:
+    torch = None
+
 class DocumentClassifier:
     """
     Fine-tuned Sequence Classifier for Sustainability & ERP Documents.

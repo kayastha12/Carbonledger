@@ -152,19 +152,51 @@ export default function DashboardTab({
         ))}
       </div>
 
-      {/* Scope Distribution Bar */}
+      {/* Scope Distribution Bar & Export Actions */}
       <div style={{ padding: '24px', borderRadius: '18px', backgroundColor: themeCard, border: `1px solid ${themeBorder}` }}>
-        <h4 style={{ fontSize: '15px', fontWeight: '800', margin: '0 0 16px 0', color: themeText }}>🌿 GHG Scope Breakdown</h4>
-        <div style={{ display: 'flex', gap: '16px', marginBottom: '12px' }}>
-          <div style={{ flex: 1, padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '12px' }}>
+          <h4 style={{ fontSize: '15px', fontWeight: '800', margin: 0, color: themeText }}>🌿 GHG Scope Breakdown</h4>
+          {hasApprovedUpload && (
+            <div style={{ display: 'flex', gap: '10px' }}>
+              <a
+                href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/calculations/download?upload_id=${universalResult?.upload_id || ''}&format=csv`}
+                download={`carbonledger_calculations_${universalResult?.upload_id || 'export'}.csv`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px',
+                  backgroundColor: 'rgba(16,185,129,0.15)', color: '#10b981',
+                  border: '1px solid rgba(16,185,129,0.3)', textDecoration: 'none',
+                  fontSize: '12px', fontWeight: '700', cursor: 'pointer'
+                }}
+              >
+                📥 Download Data (CSV)
+              </a>
+              <a
+                href={`${import.meta.env.VITE_API_BASE_URL || ''}/api/calculations/download?upload_id=${universalResult?.upload_id || ''}&format=xlsx`}
+                download={`carbonledger_calculations_${universalResult?.upload_id || 'export'}.xlsx`}
+                style={{
+                  display: 'inline-flex', alignItems: 'center', gap: '6px',
+                  padding: '8px 14px', borderRadius: '8px',
+                  backgroundColor: 'rgba(59,130,246,0.15)', color: '#3b82f6',
+                  border: '1px solid rgba(59,130,246,0.3)', textDecoration: 'none',
+                  fontSize: '12px', fontWeight: '700', cursor: 'pointer'
+                }}
+              >
+                📊 Download Data (Excel)
+              </a>
+            </div>
+          )}
+        </div>
+        <div style={{ display: 'flex', gap: '16px', marginBottom: '12px', flexWrap: 'wrap' }}>
+          <div style={{ flex: '1 1 200px', padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(16,185,129,0.1)', border: '1px solid rgba(16,185,129,0.3)' }}>
             <div style={{ fontSize: '11px', color: themeSubtext, fontWeight: '600' }}>Scope 1 (Direct Fuels)</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#10b981', marginTop: '4px' }}>{scope1Kg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg</div>
           </div>
-          <div style={{ flex: 1, padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)' }}>
+          <div style={{ flex: '1 1 200px', padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(59,130,246,0.1)', border: '1px solid rgba(59,130,246,0.3)' }}>
             <div style={{ fontSize: '11px', color: themeSubtext, fontWeight: '600' }}>Scope 2 (Electricity Grid)</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#3b82f6', marginTop: '4px' }}>{scope2Kg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg</div>
           </div>
-          <div style={{ flex: 1, padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
+          <div style={{ flex: '1 1 200px', padding: '14px', borderRadius: '10px', backgroundColor: 'rgba(245,158,11,0.1)', border: '1px solid rgba(245,158,11,0.3)' }}>
             <div style={{ fontSize: '11px', color: themeSubtext, fontWeight: '600' }}>Scope 3 (Value Chain / CBAM)</div>
             <div style={{ fontSize: '18px', fontWeight: '800', color: '#f59e0b', marginTop: '4px' }}>{scope3Kg.toLocaleString(undefined, { minimumFractionDigits: 0, maximumFractionDigits: 2 })} kg</div>
           </div>

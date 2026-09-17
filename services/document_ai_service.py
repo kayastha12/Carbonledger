@@ -245,235 +245,234 @@ class DocumentAIService:
                                         canonical = h_clean.replace(" ", "_")
                                     headers.append(canonical)
 
-                            last_meta = {}
-                            for row_idx, row in enumerate(t[1:]):
-                                row_dict = {}
-                                for col_idx, cell in enumerate(row):
-                                    col_name = headers[col_idx] if col_idx < len(headers) else "unknown"
-                                    val = doc_ai_pipeline.clean_cell_value(cell)
-                                    meta_cols = [
-                                        "supplier", "supplier_name", "invoice_id", "date",
-                                        "invoice_date", "period", "billing_period", "po_id",
-                                        "delivery_date", "bill_id", "shipment_id", "facility_id"
-                                    ]
-                                    if col_name in meta_cols:
-                                        if val and str(val).strip():
-                                            last_meta[col_name] = val
-                                        else:
-                                            val = last_meta.get(col_name)
-                                    row_dict[col_name] = val
+                                last_meta = {}
+                                for row_idx, row in enumerate(t[1:]):
+                                    row_dict = {}
+                                    for col_idx, cell in enumerate(row):
+                                        col_name = headers[col_idx] if col_idx < len(headers) else "unknown"
+                                        val = doc_ai_pipeline.clean_cell_value(cell)
+                                        meta_cols = [
+                                            "supplier", "supplier_name", "invoice_id", "date",
+                                            "invoice_date", "period", "billing_period", "po_id",
+                                            "delivery_date", "bill_id", "shipment_id", "facility_id"
+                                        ]
+                                        if col_name in meta_cols:
+                                            if val and str(val).strip():
+                                                last_meta[col_name] = val
+                                            else:
+                                                val = last_meta.get(col_name)
+                                        row_dict[col_name] = val
 
-                                # Canonical bridge for schema field aliases
-                                if "invoice_date" in row_dict and not row_dict.get("date"):
-                                    row_dict["date"] = row_dict["invoice_date"]
-                                if "billing_period" in row_dict and not row_dict.get("period"):
-                                    row_dict["period"] = row_dict["billing_period"]
-                                if "material" in row_dict and not row_dict.get("material_type"):
-                                    row_dict["material_type"] = row_dict["material"]
-                                if "material_type" in row_dict and not row_dict.get("material"):
-                                    row_dict["material"] = row_dict["material_type"]
-                                if "consumption" in row_dict and not row_dict.get("consumption_kwh") and segment_type == "ELECTRICITY_GRID":
-                                    row_dict["consumption_kwh"] = row_dict["consumption"]
+                                    # Canonical bridge for schema field aliases
+                                    if "invoice_date" in row_dict and not row_dict.get("date"):
+                                        row_dict["date"] = row_dict["invoice_date"]
+                                    if "billing_period" in row_dict and not row_dict.get("period"):
+                                        row_dict["period"] = row_dict["billing_period"]
+                                    if "material" in row_dict and not row_dict.get("material_type"):
+                                        row_dict["material_type"] = row_dict["material"]
+                                    if "material_type" in row_dict and not row_dict.get("material"):
+                                        row_dict["material"] = row_dict["material_type"]
+                                    if "consumption" in row_dict and not row_dict.get("consumption_kwh") and segment_type == "ELECTRICITY_GRID":
+                                        row_dict["consumption_kwh"] = row_dict["consumption"]
 
-                                row_dict, _ = propagate_context_to_row(row_dict, page_ctx, segment_type)
-                                mapped_rec = doc_ai_pipeline.map_row_to_schema(row_dict, segment_type)
-
-                                # Preserve all canonical non-None keys from row_dict in mapped_rec
-                                for k, v in row_dict.items():
-                                    if v is not None and (k not in mapped_rec or mapped_rec.get(k) is None):
-                                        mapped_rec[k] = v
-
-                                # Bridge mapped_rec missing keys
-                                if row_dict.get("material") and not mapped_rec.get("material"):
-                                    mapped_rec["material"] = row_dict.get("material")
-                                if row_dict.get("date") and not mapped_rec.get("date"):
-                                    mapped_rec["date"] = doc_ai_pipeline.clean_date(row_dict.get("date"))
-                                if row_dict.get("period") and not mapped_rec.get("period"):
-                                    mapped_rec["period"] = row_dict.get("period")
-
-                                if "currency" not in mapped_rec or not mapped_rec["currency"]:
-                                    curr, _ = doc_ai_pipeline.detect_currency(row_dict, raw_headers)
-                                    mapped_rec["currency"] = curr
-
-                                # Enforce no fake fallback suppliers
-                                if mapped_rec.get("supplier") and "unknown" in str(mapped_rec.get("supplier")).lower():
-                                    mapped_rec["supplier"] = None
-                                if mapped_rec.get("supplier_name") and "unknown" in str(mapped_rec.get("supplier_name")).lower():
-                                    mapped_rec["supplier_name"] = None
-
-                                # Provenance tracking for each cell
-                                row_provenance = {}
-                                for key, val in mapped_rec.items():
-                                    if val is not None:
-                                        raw_cell_val = row_dict.get(key) or str(val)
-                                        bbox = doc_ai_pipeline.find_text_bbox(p_words, raw_cell_val)
-                                        if not bbox:
-                                            bbox = doc_ai_pipeline.find_text_bbox(p_words, str(val))
-                                        row_provenance[key] = {
-                                            "field": key,
-                                            "value": val,
-                                            "source": "PDF_TEXT" if ocr_engine_name == "pdfplumber" else "TESSERACT_OCR",
-                                            "page": p_num,
-                                            "bbox": bbox,
-                                            "raw_text": str(val),
-                                            "confidence": 0.95
-                                        }
-                                    else:
-                                        row_provenance[key] = {
-                                            "field": key,
-                                            "value": None,
-                                            "source": "NOT_FOUND",
-                                            "page": p_num,
-                                            "bbox": None,
-                                            "raw_text": None,
-                                            "confidence": 0.0
-                                        }
-
-                                mapped_rec["_provenance"] = row_provenance
-                                mapped_rec["_page"] = p_num
-                                mapped_rec["_raw_row"] = row_dict
-                                extracted_records.append(mapped_rec)
-
-            if not use_table_parser:
-                # Check for line-item structured text (e.g. pipe-delimited, tab-delimited, or key-value lines)
-                for p_num in seg_pages:
-                    if p_num <= len(pdf_obj.pages):
-                        p_obj = pdf_obj.pages[p_num - 1]
-                        page_text = p_obj.extract_text() or ""
-                        
-                        # 1. Pipe-delimited or key-value lines
-                        kv_accumulator = {}
-                        for line in page_text.split("\n"):
-                            line_str = line.strip()
-                            if not line_str:
-                                if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
-                                    mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
-                                    mapped_rec["_provenance"] = {}
-                                    mapped_rec["_page"] = p_num
-                                    mapped_rec["_raw_row"] = dict(kv_accumulator)
-                                    extracted_records.append(mapped_rec)
-                                    kv_accumulator = {}
-                                continue
-
-                            if "|" in line_str and (":" in line_str or any(kw in line_str.lower() for kw in ["material", "supplier", "quantity", "po", "inv", "item", "product"])):
-                                parts = [pt.strip() for pt in line_str.split("|")]
-                                row_dict = {}
-                                for part in parts:
-                                    if ":" in part:
-                                        k, v = part.split(":", 1)
-                                        canonical = FieldMapper.get_canonical_field(k.strip().lower())
-                                        if canonical == "unknown":
-                                            canonical = k.strip().lower().replace(" ", "_")
-                                        row_dict[canonical] = doc_ai_pipeline.clean_cell_value(v)
-                                if row_dict.get("material") or row_dict.get("quantity"):
+                                    row_dict, _ = propagate_context_to_row(row_dict, page_ctx, segment_type)
                                     mapped_rec = doc_ai_pipeline.map_row_to_schema(row_dict, segment_type)
-                                    mapped_rec["_provenance"] = {}
+
+                                    # Preserve all canonical non-None keys from row_dict in mapped_rec
+                                    for k, v in row_dict.items():
+                                        if v is not None and (k not in mapped_rec or mapped_rec.get(k) is None):
+                                            mapped_rec[k] = v
+
+                                    # Bridge mapped_rec missing keys
+                                    if row_dict.get("material") and not mapped_rec.get("material"):
+                                        mapped_rec["material"] = row_dict.get("material")
+                                    if row_dict.get("date") and not mapped_rec.get("date"):
+                                        mapped_rec["date"] = doc_ai_pipeline.clean_date(row_dict.get("date"))
+                                    if row_dict.get("period") and not mapped_rec.get("period"):
+                                        mapped_rec["period"] = row_dict.get("period")
+
+                                    if "currency" not in mapped_rec or not mapped_rec["currency"]:
+                                        curr, _ = doc_ai_pipeline.detect_currency(row_dict, raw_headers)
+                                        mapped_rec["currency"] = curr
+
+                                    # Enforce no fake fallback suppliers
+                                    if mapped_rec.get("supplier") and "unknown" in str(mapped_rec.get("supplier")).lower():
+                                        mapped_rec["supplier"] = None
+                                    if mapped_rec.get("supplier_name") and "unknown" in str(mapped_rec.get("supplier_name")).lower():
+                                        mapped_rec["supplier_name"] = None
+
+                                    # Provenance tracking for each cell
+                                    row_provenance = {}
+                                    for key, val in mapped_rec.items():
+                                        if val is not None:
+                                            raw_cell_val = row_dict.get(key) or str(val)
+                                            bbox = doc_ai_pipeline.find_text_bbox(p_words, raw_cell_val)
+                                            if not bbox:
+                                                bbox = doc_ai_pipeline.find_text_bbox(p_words, str(val))
+                                            row_provenance[key] = {
+                                                "field": key,
+                                                "value": val,
+                                                "source": "PDF_TEXT" if ocr_engine_name == "pdfplumber" else "TESSERACT_OCR",
+                                                "page": p_num,
+                                                "bbox": bbox,
+                                                "raw_text": str(val),
+                                                "confidence": 0.95
+                                            }
+                                        else:
+                                            row_provenance[key] = {
+                                                "field": key,
+                                                "value": None,
+                                                "source": "NOT_FOUND",
+                                                "page": p_num,
+                                                "bbox": None,
+                                                "raw_text": None,
+                                                "confidence": 0.0
+                                            }
+
+                                    mapped_rec["_provenance"] = row_provenance
                                     mapped_rec["_page"] = p_num
                                     mapped_rec["_raw_row"] = row_dict
                                     extracted_records.append(mapped_rec)
 
-                            elif ":" in line_str:
-                                k, v = line_str.split(":", 1)
-                                canonical = FieldMapper.get_canonical_field(k.strip().lower())
-                                if canonical != "unknown":
-                                    clean_v = doc_ai_pipeline.clean_cell_value(v)
-                                    # Decompose quantity and unit if in same field (e.g. "500 kg")
-                                    if canonical in ["quantity", "weight"] and clean_v:
-                                        m_qty = re.match(r"^([\d,.]+)\s*([a-zA-Z]+(?:\.[a-zA-Z]+)?)$", str(clean_v).strip())
-                                        if m_qty:
-                                            try:
-                                                clean_v = float(m_qty.group(1).replace(",", ""))
-                                                kv_accumulator["unit"] = m_qty.group(2).lower().strip()
-                                            except ValueError:
-                                                pass
-                                    kv_accumulator[canonical] = clean_v
+                if not use_table_parser:
+                    # Check for line-item structured text (e.g. pipe-delimited, tab-delimited, or key-value lines)
+                    for p_num in seg_pages:
+                        if p_num in cached_pages:
+                            page_text = cached_pages[p_num]["text"]
+                            
+                            # 1. Pipe-delimited or key-value lines
+                            kv_accumulator = {}
+                            for line in page_text.split("\n"):
+                                line_str = line.strip()
+                                if not line_str:
+                                    if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
+                                        mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
+                                        mapped_rec["_provenance"] = {}
+                                        mapped_rec["_page"] = p_num
+                                        mapped_rec["_raw_row"] = dict(kv_accumulator)
+                                        extracted_records.append(mapped_rec)
+                                        kv_accumulator = {}
+                                    continue
 
-                        if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
-                            mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
-                            mapped_rec["_provenance"] = {}
-                            mapped_rec["_page"] = p_num
-                            mapped_rec["_raw_row"] = dict(kv_accumulator)
-                            extracted_records.append(mapped_rec)
+                                if "|" in line_str and (":" in line_str or any(kw in line_str.lower() for kw in ["material", "supplier", "quantity", "po", "inv", "item", "product"])):
+                                    parts = [pt.strip() for pt in line_str.split("|")]
+                                    row_dict = {}
+                                    for part in parts:
+                                        if ":" in part:
+                                            k, v = part.split(":", 1)
+                                            canonical = FieldMapper.get_canonical_field(k.strip().lower())
+                                            if canonical == "unknown":
+                                                canonical = k.strip().lower().replace(" ", "_")
+                                            row_dict[canonical] = doc_ai_pipeline.clean_cell_value(v)
+                                    if row_dict.get("material") or row_dict.get("quantity"):
+                                        mapped_rec = doc_ai_pipeline.map_row_to_schema(row_dict, segment_type)
+                                        mapped_rec["_provenance"] = {}
+                                        mapped_rec["_page"] = p_num
+                                        mapped_rec["_raw_row"] = row_dict
+                                        extracted_records.append(mapped_rec)
 
-                if not extracted_records:
-                    layout_res = layout_analyzer.analyze(sub_parsed)
-                    single_res = extractor.extract(sub_parsed, cls_res, layout_res)
-                    act_data = extractor.to_activity_data(single_res) if hasattr(extractor, "to_activity_data") else {}
-                    if act_data:
-                        extracted_records.append({
-                            "supplier": act_data.get("supplier", {}).get("name"),
-                            "material": act_data.get("material", {}).get("name") if isinstance(act_data.get("material"), dict) else act_data.get("material"),
-                            "quantity": act_data.get("quantity", {}).get("value") if isinstance(act_data.get("quantity"), dict) else act_data.get("quantity"),
-                            "unit": act_data.get("quantity", {}).get("unit") if isinstance(act_data.get("quantity"), dict) else act_data.get("unit"),
-                            "_provenance": {},
-                            "_page": seg_pages[0] if seg_pages else 1,
-                            "_raw_row": {}
-                        })
+                                elif ":" in line_str:
+                                    k, v = line_str.split(":", 1)
+                                    canonical = FieldMapper.get_canonical_field(k.strip().lower())
+                                    if canonical != "unknown":
+                                        clean_v = doc_ai_pipeline.clean_cell_value(v)
+                                        # Decompose quantity and unit if in same field (e.g. "500 kg")
+                                        if canonical in ["quantity", "weight"] and clean_v:
+                                            m_qty = re.match(r"^([\d,.]+)\s*([a-zA-Z]+(?:\.[a-zA-Z]+)?)$", str(clean_v).strip())
+                                            if m_qty:
+                                                try:
+                                                    clean_v = float(m_qty.group(1).replace(",", ""))
+                                                    kv_accumulator["unit"] = m_qty.group(2).lower().strip()
+                                                except ValueError:
+                                                    pass
+                                        kv_accumulator[canonical] = clean_v
 
-            full_page_text = " ".join([p.get("text", "") for p in sub_pages])
-            for r_dict in extracted_records:
-                r_prov = r_dict.pop("_provenance", {})
-                r_page = r_dict.pop("_page", 1)
-                r_raw = r_dict.pop("_raw_row", {})
+                            if kv_accumulator.get("material") and (kv_accumulator.get("quantity") or kv_accumulator.get("weight")):
+                                mapped_rec = doc_ai_pipeline.map_row_to_schema(kv_accumulator, segment_type)
+                                mapped_rec["_provenance"] = {}
+                                mapped_rec["_page"] = p_num
+                                mapped_rec["_raw_row"] = dict(kv_accumulator)
+                                extracted_records.append(mapped_rec)
 
-                carbon_rec = mapper.map_to_carbon_record(
-                    r_dict,
-                    seg_id,
-                    segment_type,
-                    r_page,
-                    full_page_text,
-                    r_prov
-                )
+                    if not extracted_records:
+                        layout_res = layout_analyzer.analyze(sub_parsed)
+                        single_res = extractor.extract(sub_parsed, cls_res, layout_res)
+                        act_data = extractor.to_activity_data(single_res) if hasattr(extractor, "to_activity_data") else {}
+                        if act_data:
+                            extracted_records.append({
+                                "supplier": act_data.get("supplier", {}).get("name"),
+                                "material": act_data.get("material", {}).get("name") if isinstance(act_data.get("material"), dict) else act_data.get("material"),
+                                "quantity": act_data.get("quantity", {}).get("value") if isinstance(act_data.get("quantity"), dict) else act_data.get("quantity"),
+                                "unit": act_data.get("quantity", {}).get("unit") if isinstance(act_data.get("quantity"), dict) else act_data.get("unit"),
+                                "_provenance": {},
+                                "_page": seg_pages[0] if seg_pages else 1,
+                                "_raw_row": {}
+                            })
 
-                if "activity" not in carbon_rec or not isinstance(carbon_rec["activity"], dict):
-                    carbon_rec["activity"] = {}
-                if "supplier" not in carbon_rec or not isinstance(carbon_rec["supplier"], dict):
-                    carbon_rec["supplier"] = {"name": None, "supplier_id": None, "country": None, "state": None, "city": None}
-                if "company" not in carbon_rec or not isinstance(carbon_rec["company"], dict):
-                    carbon_rec["company"] = {"name": None, "company_id": None, "country": None, "state": None, "facility": None}
+                full_page_text = " ".join([p.get("text", "") for p in sub_pages])
+                for r_dict in extracted_records:
+                    r_prov = r_dict.pop("_provenance", {})
+                    r_page = r_dict.pop("_page", 1)
+                    r_raw = r_dict.pop("_raw_row", {})
 
-                # Preserve exact material/product name from document
-                exact_mat = r_dict.get("material") or r_dict.get("material_type") or r_raw.get("material") or r_raw.get("material_type")
-                if exact_mat:
-                    carbon_rec["activity"]["material"] = exact_mat
-                    carbon_rec["activity"]["product"] = exact_mat
+                    carbon_rec = mapper.map_to_carbon_record(
+                        r_dict,
+                        seg_id,
+                        segment_type,
+                        r_page,
+                        full_page_text,
+                        r_prov
+                    )
 
-                # Preserve transport fields from document
-                exact_mode = r_dict.get("transport_mode") or r_raw.get("transport_mode") or r_dict.get("mode")
-                if exact_mode:
-                    carbon_rec["activity"]["transport_mode"] = exact_mode
-                exact_fuel = r_dict.get("fuel_type") or r_raw.get("fuel_type") or r_dict.get("fuel")
-                if exact_fuel:
-                    carbon_rec["activity"]["fuel_type"] = exact_fuel
-                exact_orig = r_dict.get("origin") or r_raw.get("origin")
-                if exact_orig:
-                    carbon_rec["activity"]["origin"] = exact_orig
-                exact_dest = r_dict.get("destination") or r_raw.get("destination")
-                if exact_dest:
-                    carbon_rec["activity"]["destination"] = exact_dest
-                exact_dist = r_dict.get("distance") or r_raw.get("distance")
-                if exact_dist is not None:
-                    try:
-                        carbon_rec["activity"]["distance"] = float(str(exact_dist).replace(",", "").strip())
-                    except ValueError:
-                        pass
-                exact_wt = r_dict.get("weight") or r_raw.get("weight")
-                if exact_wt is not None:
-                    try:
-                        carbon_rec["activity"]["weight"] = float(str(exact_wt).replace(",", "").strip())
-                    except ValueError:
-                        pass
+                    if "activity" not in carbon_rec or not isinstance(carbon_rec["activity"], dict):
+                        carbon_rec["activity"] = {}
+                    if "supplier" not in carbon_rec or not isinstance(carbon_rec["supplier"], dict):
+                        carbon_rec["supplier"] = {"name": None, "supplier_id": None, "country": None, "state": None, "city": None}
+                    if "company" not in carbon_rec or not isinstance(carbon_rec["company"], dict):
+                        carbon_rec["company"] = {"name": None, "company_id": None, "country": None, "state": None, "facility": None}
 
-                # Strict supplier ID: do NOT invent hash-based supplier IDs (e.g. SPL-3328)
-                real_sup_id = r_dict.get("supplier_id") or r_raw.get("supplier_id")
-                carbon_rec["supplier"]["supplier_id"] = real_sup_id
+                    # Preserve exact material/product name from document
+                    exact_mat = r_dict.get("material") or r_dict.get("material_type") or r_raw.get("material") or r_raw.get("material_type")
+                    if exact_mat:
+                        carbon_rec["activity"]["material"] = exact_mat
+                        carbon_rec["activity"]["product"] = exact_mat
 
-                # Real company ID
-                real_comp_id = r_dict.get("company_id") or r_raw.get("company_id")
-                if real_comp_id:
-                    carbon_rec["company"]["company_id"] = real_comp_id
+                    # Preserve transport fields from document
+                    exact_mode = r_dict.get("transport_mode") or r_raw.get("transport_mode") or r_dict.get("mode")
+                    if exact_mode:
+                        carbon_rec["activity"]["transport_mode"] = exact_mode
+                    exact_fuel = r_dict.get("fuel_type") or r_raw.get("fuel_type") or r_dict.get("fuel")
+                    if exact_fuel:
+                        carbon_rec["activity"]["fuel_type"] = exact_fuel
+                    exact_orig = r_dict.get("origin") or r_raw.get("origin")
+                    if exact_orig:
+                        carbon_rec["activity"]["origin"] = exact_orig
+                    exact_dest = r_dict.get("destination") or r_raw.get("destination")
+                    if exact_dest:
+                        carbon_rec["activity"]["destination"] = exact_dest
+                    exact_dist = r_dict.get("distance") or r_raw.get("distance")
+                    if exact_dist is not None:
+                        try:
+                            carbon_rec["activity"]["distance"] = float(str(exact_dist).replace(",", "").strip())
+                        except ValueError:
+                            pass
+                    exact_wt = r_dict.get("weight") or r_raw.get("weight")
+                    if exact_wt is not None:
+                        try:
+                            carbon_rec["activity"]["weight"] = float(str(exact_wt).replace(",", "").strip())
+                        except ValueError:
+                            pass
 
-                flat_records.append(carbon_rec)
+                    # Strict supplier ID: do NOT invent hash-based supplier IDs (e.g. SPL-3328)
+                    real_sup_id = r_dict.get("supplier_id") or r_raw.get("supplier_id")
+                    carbon_rec["supplier"]["supplier_id"] = real_sup_id
+
+                    # Real company ID
+                    real_comp_id = r_dict.get("company_id") or r_raw.get("company_id")
+                    if real_comp_id:
+                        carbon_rec["company"]["company_id"] = real_comp_id
+
+                    flat_records.append(carbon_rec)
         finally:
             if pdf_obj:
                 try:

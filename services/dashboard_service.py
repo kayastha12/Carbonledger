@@ -22,10 +22,10 @@ class DashboardService:
         """
         total_records_count = len(inventory_records)
         
-        scope_1_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 1"), 2)
-        scope_2_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 2"), 2)
-        scope_3_kg = round(sum(r["co2e_kg"] for r in inventory_records if r["scope"] == "Scope 3"), 2)
-        total_cbam_cost_eur = round(sum(r["cbam_cost_eur"] for r in inventory_records), 2)
+        scope_1_kg = round(sum(r.get("co2e_kg", 0.0) for r in inventory_records if r.get("scope") == "Scope 1" and r.get("calculation_status") == "Calculated"), 2)
+        scope_2_kg = round(sum(r.get("co2e_kg", 0.0) for r in inventory_records if r.get("scope") == "Scope 2" and r.get("calculation_status") == "Calculated"), 2)
+        scope_3_kg = round(sum(r.get("co2e_kg", 0.0) for r in inventory_records if r.get("scope") == "Scope 3" and r.get("calculation_status") == "Calculated"), 2)
+        total_cbam_cost_eur = round(sum(r.get("cbam_cost_eur", 0.0) for r in inventory_records if r.get("calculation_status") == "Calculated"), 2)
         total_co2e_kg = round(scope_1_kg + scope_2_kg + scope_3_kg, 2)
         
         matched_factors_count = sum(1 for r in inventory_records if r["calculation_status"] == "Calculated")

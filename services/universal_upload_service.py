@@ -390,7 +390,7 @@ class UniversalUploadService:
                 factor_confidence = 0.0
             elif eval_res["calculation_status"] == "READY":
                 calculation_status = "Calculated"
-                co2e_kg = eval_res["emission_kgco2e"]
+                co2e_kg = round(float(eval_res["emission_kgco2e"]), 2)
                 co2_kg = co2e_kg
                 ch4_kg = 0.0
                 n2o_kg = 0.0

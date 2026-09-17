@@ -10,7 +10,7 @@ from typing import List, Optional
 
 from fastapi import FastAPI, HTTPException, UploadFile, File, Form, Depends, Header, WebSocket, WebSocketDisconnect, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from pydantic import BaseModel
 import pandas as pd
 import jwt
@@ -1154,7 +1154,9 @@ def get_latest_upload(request: Request = None):
         "cbam_report_excel": f"/api/reports/download?path={os.path.join(upload_dir, 'cbam_report.xlsx')}",
         "inventory_excel": f"/api/reports/download?path={os.path.join(upload_dir, 'inventory.xlsx')}",
         "audit_json": f"/api/reports/download?path={os.path.join(upload_dir, 'audit.json')}",
-        "executive_esg_pdf": f"/api/reports/download?path={os.path.join(upload_dir, 'executive_esg_report.pdf')}"
+        "executive_esg_pdf": f"/api/reports/download?path={os.path.join(upload_dir, 'executive_esg_report.pdf')}",
+        "calculated_data_csv": f"/api/calculations/download?upload_id={upload_id}&format=csv",
+        "calculated_data_excel": f"/api/calculations/download?upload_id={upload_id}&format=xlsx"
     }
     
     return {
@@ -1188,47 +1190,105 @@ def get_latest_upload(request: Request = None):
         "reports": reports_map
     }
 
-@app.get("/api/reports/download")
-def download_report_file(path: str, request: Request = None):
-    project_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    allowed_dir = os.path.abspath(os.path.join(project_root, "output", "reports"))
-    target_path = os.path.abspath(path)
+@app.get("/api/calculations/download")
+@app.get("/api/v1/calculations/export")
+def download_calculations_export(
+    upload_id: Optional[str] = None,
+    format: str = "csv",
+    request: Request = None
+):
+    """
+    Downloads calculated data for independent audit verification.
+    Matches Dashboard total, Scope 1, Scope 2, and Scope 3 exactly.
+    """
+    current_user = get_current_user_from_req(request) if request else {"id": 1}
+    conn = get_db_connection()
+    cursor = conn.cursor()
     
-    # Check if target_path exists directly or within allowed_dir
-    if not os.path.exists(target_path):
-        rel_target = os.path.abspath(os.path.join(allowed_dir, os.path.basename(path)))
-        if os.path.exists(rel_target):
-            target_path = rel_target
-        else:
-            # Check within uploads subdirectory
-            for root, _, files in os.walk(allowed_dir):
-                if os.path.basename(path) in files:
-                    target_path = os.path.join(root, os.path.basename(path))
-                    break
-                    
-    if not os.path.exists(target_path):
-        raise HTTPException(status_code=404, detail="Requested report file does not exist. Please run calculations first.")
-        
-    filename = os.path.basename(target_path)
-    media_type = "application/octet-stream"
-    if filename.endswith(".pdf"):
-        media_type = "application/pdf"
-    elif filename.endswith(".xlsx"):
-        media_type = "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-    elif filename.endswith(".json"):
-        media_type = "application/json"
-    elif filename.endswith(".csv"):
-        media_type = "text/csv"
-        
-    return FileResponse(
-        target_path,
-        media_type=media_type,
-        filename=filename,
-        headers={
-            "Content-Disposition": f'attachment; filename="{filename}"',
-            "Access-Control-Expose-Headers": "Content-Disposition"
-        }
-    )
+    # If upload_id is not specified, get latest approved upload session for this user
+    if not upload_id:
+        cursor.execute("SELECT upload_id, filename FROM upload_sessions WHERE user_id = ? AND total_co2e_kg IS NOT NULL ORDER BY ROWID DESC LIMIT 1", (current_user["id"],))
+        sess = cursor.fetchone()
+        if not sess:
+            conn.close()
+            raise HTTPException(status_code=404, detail="No calculated documents found to download. Please upload and approve an invoice first.")
+        upload_id = sess["upload_id"]
+        doc_filename = sess["filename"]
+    else:
+        cursor.execute("SELECT filename FROM upload_sessions WHERE upload_id = ?", (upload_id,))
+        sess = cursor.fetchone()
+        doc_filename = sess["filename"] if sess else "invoice.pdf"
+
+    cursor.execute("""
+    SELECT * FROM calculation_results WHERE upload_id = ?
+    """, (upload_id,))
+    rows = [dict(r) for r in cursor.fetchall()]
+    conn.close()
+
+    if not rows:
+        raise HTTPException(status_code=404, detail=f"No calculation records found for upload_id={upload_id}")
+
+    # Build export rows with the exact required audit columns
+    export_rows = []
+    for idx, r in enumerate(rows, start=1):
+        export_rows.append({
+            "document_id": upload_id,
+            "source_document": doc_filename,
+            "invoice_number": r.get("po_number") or r.get("invoice_id") or "N/A",
+            "invoice_date": r.get("delivery_date") or r.get("date") or "N/A",
+            "supplier": r.get("supplier") or "N/A",
+            "activity_record_id": f"REC-{idx:04d}",
+            "activity_type": r.get("activity_type") or "PURCHASED_GOODS",
+            "material_description": r.get("material") or "N/A",
+            "category": r.get("category") or r.get("matched_material") or "N/A",
+            "scope": r.get("scope") or "Scope 3",
+            "original_quantity": r.get("quantity"),
+            "original_unit": r.get("unit"),
+            "normalized_quantity": r.get("quantity"),
+            "normalized_unit": r.get("unit"),
+            "factor_id": r.get("factor_id") or "N/A",
+            "factor_value": r.get("emission_factor") if r.get("emission_factor") is not None else 0.0,
+            "factor_unit": f"kg CO2e / {r.get('unit')}" if r.get("unit") else "kg CO2e / unit",
+            "factor_source": r.get("factor_source") or "CarbonLedger Authoritative Database",
+            "factor_year": "2026",
+            "factor_geography": r.get("country") or "Global",
+            "conversion": "1.0",
+            "formula": r.get("formula") or f"{r.get('quantity')} × {r.get('emission_factor')}",
+            "calculated_co2e_kg": r.get("co2e_kg") if r.get("calculation_status") == "Calculated" else None,
+            "calculation_status": r.get("calculation_status") or "Calculated",
+            "source_page": r.get("page_number", 1)
+        })
+
+    df = pd.DataFrame(export_rows)
+    export_filename = f"carbonledger_calculations_{upload_id}"
+    
+    if format.lower() in ["xlsx", "excel"]:
+        import io
+        output = io.BytesIO()
+        with pd.ExcelWriter(output, engine="openpyxl") as writer:
+            df.to_excel(writer, index=False, sheet_name="Calculations")
+        output.seek(0)
+        return StreamingResponse(
+            output,
+            media_type="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+            headers={
+                "Content-Disposition": f'attachment; filename="{export_filename}.xlsx"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
+    else: # Default CSV
+        import io
+        output = io.StringIO()
+        df.to_csv(output, index=False)
+        csv_bytes = io.BytesIO(output.getvalue().encode("utf-8"))
+        return StreamingResponse(
+            csv_bytes,
+            media_type="text/csv",
+            headers={
+                "Content-Disposition": f'attachment; filename="{export_filename}.csv"',
+                "Access-Control-Expose-Headers": "Content-Disposition"
+            }
+        )
 
 @app.get("/api/v1/settings")
 def get_settings():
