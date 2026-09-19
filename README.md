@@ -1,78 +1,183 @@
-# CarbonLedger Enterprise Sustainability OS
+# CarbonLedger Enterprise Sustainability & CBAM Compliance OS
 
-CarbonLedger is an enterprise-grade sustainability operating system designed to simulate, monitor, and audit supply chain carbon emissions and CBAM (Carbon Border Adjustment Mechanism) tax compliance. The platform integrates machine learning classification, Named Entity Recognition (NER), semantic matching, and analytical reporting to automate emissions auditing.
+<div align="center">
+
+[![Live Demo](https://img.shields.io/badge/Live%20Demo-CarbonLedger%20Web%20App-00c853?style=for-the-badge&logo=render&logoColor=white)](https://carbonledger-app-vxb3.onrender.com)
+[![API Docs](https://img.shields.io/badge/FastAPI-Swagger%20Docs-0288d1?style=for-the-badge&logo=fastapi&logoColor=white)](https://carbonledger-api-8bl2.onrender.com/docs)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg?style=for-the-badge)](LICENSE)
+[![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-blue.svg?style=for-the-badge&logo=python&logoColor=white)](https://www.python.org/)
+[![React Vite](https://img.shields.io/badge/Frontend-React%20%7C%20Vite-61dafb?style=for-the-badge&logo=react&logoColor=black)](https://vitejs.dev/)
+[![ChromaDB](https://img.shields.io/badge/Vector%20DB-ChromaDB-ff6f00?style=for-the-badge)](https://www.trychroma.com/)
+
+**Enterprise-grade Sustainability Operating System for Supply Chain Carbon Auditing, Multi-Stream Data Extraction, and EU CBAM / US SEC / EU CSRD Regulatory Compliance.**
+
+[🌐 Live Web Application](https://carbonledger-app-vxb3.onrender.com) • [📖 Interactive API Docs](https://carbonledger-api-8bl2.onrender.com/docs) • [📊 Technical Audit Report](docs/CARBONLEDGER_TECHNICAL_AUDIT_REPORT.md) • [📋 System Requirements (SRS)](docs/CarbonLedger_SRS_v1.0.pdf)
+
+</div>
 
 ---
 
-## Architecture Overview
+## 🌟 Overview
 
-CarbonLedger uses a decoupled architecture with a FastAPI backend and a Vite React frontend:
+**CarbonLedger** is an enterprise sustainability operating system built to automate, simulate, and audit supply chain carbon emissions ($Scope\ 1,\ Scope\ 2,\ Scope\ 3$) and calculate cross-border **EU CBAM (Carbon Border Adjustment Mechanism)** tax liabilities.
+
+By pairing modern document intelligence (LayoutLMv3, DistilBERT, Table Transformer, and OCR) with high-dimensional vector search across **8,740+ authoritative 2026 GHG Emission Factors**, CarbonLedger eliminates manual ESG data entry, enforces zero-baseline data governance, and generates verifiable, audit-grade carbon ledgers.
+
+---
+
+## 🚀 Live Demo & Production Endpoints
+
+| Resource | URL | Description |
+| :--- | :--- | :--- |
+| **🌐 Production Web App** | [carbonledger-app-vxb3.onrender.com](https://carbonledger-app-vxb3.onrender.com) | Interactive React / Vite Enterprise Dashboard |
+| **⚡ Backend API (FastAPI)** | [carbonledger-api-8bl2.onrender.com](https://carbonledger-api-8bl2.onrender.com) | Core API Service & Asynchronous Processing Engine |
+| **📑 Swagger API Documentation** | [carbonledger-api-8bl2.onrender.com/docs](https://carbonledger-api-8bl2.onrender.com/docs) | Interactive OpenAPI / Swagger UI |
+| **📚 ReDoc Specification** | [carbonledger-api-8bl2.onrender.com/redoc](https://carbonledger-api-8bl2.onrender.com/redoc) | Alternative structured technical API reference |
+
+> **Demo Credentials (Pre-seeded):**  
+> **Email:** `admin@carbonledger.io` | **Password:** `Admin@12345`  
+> *(Or click the one-click **"Run E2E AI Demo"** button on the live app)*
+
+---
+
+## 📸 Platform Interface Showcase
+
+### 1. Executive Sustainability Dashboard
+*Real-time executive oversight displaying Scope 1, 2, and 3 emissions partitioning, CBAM financial exposure (€), AI model & infrastructure health status, and live immutable audit logs.*
+![CarbonLedger Executive Dashboard](assets/screenshots/dashboard_overview.png)
+
+---
+
+### 2. Multi-Stream Consolidated Auto-Detection
+*Universal multi-modal data ingestion pipeline supporting 14+ distinct enterprise operational and ESG data streams with automatic schema and entity resolution.*
+![Multi-Stream Auto Detection Categories](assets/screenshots/auto_detection_categories.png)
+
+---
+
+### 3. Intelligent CBAM Report Generator & AI Pipeline
+*Automated EU CBAM quarterly declaration compilation, customs tariff classification, direct/indirect embedded emissions calculation, and real-time pipeline status telemetry.*
+![CBAM Intelligent Report Generator](assets/screenshots/cbam_report_generator.png)
+
+---
+
+### 4. Multi-Framework Regulatory Verification Matrix
+*Continuous compliance engine validating corporate emissions declarations against US SEC Regulation S-K and EU Corporate Sustainability Reporting Directive (CSRD) double materiality.*
+![Multi-Framework Compliance Matrix](assets/screenshots/compliance_matrix.png)
+
+---
+
+### 5. Supplier ESG Risk Matrix & Decarbonization Scoring
+*Supply chain risk scoring, historical emission benchmarking, ESG rating evaluation ($1.0 - 5.0$), and automated supplier decarbonization recommendations.*
+![Supplier ESG Risk Summary](assets/screenshots/supplier_esg_risk.png)
+
+---
+
+## 🏛️ System Architecture
 
 ```mermaid
 graph TD
-    A[Vite React Frontend] -->|HTTP/WebSockets| B[FastAPI Backend API]
-    B -->|SQL| C[(SQLite Database)]
-    B -->|Vector Search| D[(Chroma Vector DB)]
-    B -->|Pipeline Orchestration| E[Autonomous Workflow Engine]
-    E --> F[Document Classifier]
-    E --> G[NER Extractor]
-    E --> H[Calculation Engine]
-    E --> I[Recommendation Engine]
+    UI[🖥️ React / Vite Modern Frontend] -->|HTTPS / REST API| API[⚡ FastAPI Asynchronous Gateway]
+    
+    subgraph AI Pipeline & Document Intelligence
+        API --> INTAKE[Universal Data Intake Engine]
+        INTAKE --> PARSER[PDF & Table Parser / OCR]
+        PARSER --> CLF[DistilBERT Document Classifier]
+        PARSER --> NER[DistilBERT Token / Entity Extractor]
+        PARSER --> TBL[Table Transformer / pdfplumber]
+    end
+    
+    subgraph Semantic Factor Matching & Embeddings
+        NER --> MATCHER[Contrastive Triplet Semantic Matcher]
+        MATCHER --> VDB[(Chroma Vector DB: 8,740+ 2026 GHG Factors)]
+    end
+    
+    subgraph Regulatory & Computation Engines
+        MATCHER --> CALC[GHG Protocol Scope 1/2/3 Calculation Engine]
+        CALC --> CBAM_ENG[EU CBAM Tariff & Tax Liability Engine]
+        CALC --> COMPL[SEC S-K & EU CSRD Verification Engine]
+        CALC --> RAG[AI Copilot RAG Service / BGE Embeddings]
+    end
+    
+    subgraph Storage & Export Ledger
+        CALC --> SQL[(SQLite Multi-Tenant Relational DB)]
+        CALC --> EXP[Excel / CSV 25-Column Audit Ledger Generator]
+        CBAM_ENG --> XML[CBAM XML / PDF Declaration Exporter]
+    end
 ```
 
 ---
 
-## Features
+## ⚡ Core Features & Capabilities
 
-- **Document Processing**: Automatic document classification (Invoices, Utility Bills, POs, etc.) and NER information extraction.
-- **Emissions Auditing & Calculations**: Automated Scope 1, 2, and 3 emission calculations using standardized activity factors.
-- **Dynamic Factor Matching**: Contrastive learning semantic search of raw descriptions against 2026 GHG Emission Factors using ChromaDB.
-- **SaaS Governance & Auditing**: Complete RBAC (Role-Based Access Control) multi-tenant framework with audit trail logs and automated alerting.
-- **CBAM Compliance Reporting**: Automatic generation of CBAM quarterly declarations and PDF/Excel exports.
-- **Predictive Analytics & Digital Twins**: LSTM-based facility forecasting and supply chain simulation.
-
----
-
-## AI Models & ML Pipelines
-
-1. **Document Classifier**: Fine-tuned sequence classifier based on `distilbert-base-uncased` mapping text to document categories.
-2. **NER Extractor**: Fine-tuned token classifier based on `distilbert-base-uncased` extracting critical transactional metadata (supplier, material, quantity, units, country, etc.).
-3. **Contrastive Matcher**: SentenceTransformer model fine-tuned using contrastive triplet loss to map arbitrary invoice descriptions to standardized GHG factors.
-4. **Supplier Risk & Recommenders**: Random Forest and Isolation Forest classifiers for supplier ESG ratings, anomaly verification, and reduction recommendations.
+- **Universal Multi-Stream Ingestion**: Ingests Invoices, Purchase Orders, Utility Bills, Fuel Logs, Logistics Manifests, Waste, and Water datasets in PDF, Excel, CSV, DOCX, JSON, or Image formats.
+- **Zero-Baseline Data Governance**: Enforces zero-baseline data integrity—no hallucinated or unapproved placeholder emissions ever reach corporate ESG reports without human-in-the-loop review.
+- **Semantic GHG Factor Matching**: High-dimensional contrastive semantic retrieval matching raw item descriptions against the 2026 GHG Emission Factor master dataset (8,740+ factors).
+- **Automated CBAM Tax Calculation**: Automatically calculates direct and indirect embedded emissions, country-specific grid emission adjustments, and estimated EU ETS carbon tariff liabilities.
+- **25-Column Audit-Grade Export**: Produces verifiable CSV and Excel workbooks linking every kilogram of $\text{CO}_2\text{e}$ back to raw invoices, bounding-box provenance, and factor reference codes.
+- **Interactive AI Copilot (RAG)**: Natural-language assistant backed by dense embeddings to answer complex queries about high-emission suppliers, scope partitions, and mitigation pathways.
 
 ---
 
-## Datasets
+## 🤖 AI Models & Pipelines
 
-All raw master datasets, transactional simulated ERP logs, and emission factor tables are stored under [datasets/](file:///d:/internship/carbonledger/datasets/):
-- **Master Lists**: `datasets/output/master/` (Companies, Suppliers, Products, Plants)
-- **Simulated Transactions**: `datasets/output/transactional/` (Invoices, POs, Logistics, Utility Bills, ESG Audits, RAG Documents)
-- **GHG Factors Workbook**: `datasets/CarbonLedger_GHG_Factors_2026_Clean.xlsx`
+1. **Document Classifier**: Sequence classification model fine-tuned on `distilbert-base-uncased` across procurement and ESG document types.
+2. **NER Extractor**: Fine-tuned token classifier extracting material names, quantities, unit conventions, supplier identifiers, and origins.
+3. **Contrastive Semantic Matcher**: Fine-tuned SentenceTransformer leveraging triplet loss for robust fuzzy matching between colloquial invoice descriptions and official GHG factor taxonomies.
+4. **Supplier Anomaly & Risk Scorer**: Isolation Forest and Random Forest classifiers predicting supplier carbon risk ratings and anomalous emission spikes.
 
 ---
 
-## Installation & Setup
+## 📂 Repository Structure
+
+```
+Carbonledger/
+├── api/                  # FastAPI Application, routes, schemas, and SQLite database models
+├── assets/               # Visual assets and application UI screenshots
+│   └── screenshots/      # High-resolution dashboard and workflow captures
+├── configs/              # Deployment configurations and logging profiles
+├── datasets/             # Master datasets, GHG factor workbooks, and transactional generators
+│   ├── compressed/       # Compressed archives of simulated enterprise ERP data
+│   └── CarbonLedger_GHG_Factors_2026_Clean.xlsx
+├── docker/               # Multi-container Dockerfile and docker-compose configurations
+├── docs/                 # System documentation, specifications, and presentation scripts
+│   ├── CARBONLEDGER_COMPLETE_WALKTHROUGH.md
+│   ├── CARBONLEDGER_DEMO_SCRIPT.md
+│   ├── CARBONLEDGER_TECHNICAL_AUDIT_REPORT.md
+│   └── CarbonLedger_SRS_v1.0.pdf
+├── frontend/             # Vite + React single-page enterprise web application
+├── models/               # Fine-tuned model definitions, loaders, and pretrained caches
+├── pipeline/             # Multi-stage asynchronous extraction and reconciliation pipelines
+├── scripts/              # Setup orchestrators, database seeders, and validation scripts
+├── services/             # Core computation, CBAM, RAG Copilot, and table detection engines
+├── tests/                # Pytest suites, end-to-end integration tests, and sample fixtures
+├── render.yaml           # Automated Cloud Deployment Blueprint for Render
+├── requirements.txt      # Python runtime dependencies
+└── package.json          # Frontend dependencies configuration
+```
+
+---
+
+## 🛠️ Local Installation & Setup
 
 ### Prerequisites
-- Python 3.10+
-- Node.js 18+
-- Git LFS (Git Large File Storage)
+- **Python 3.10+**
+- **Node.js 18+** & **npm**
+- **Git LFS** (Git Large File Storage)
 
-### 1. Set Up Git LFS & Clone
-Initialize Git LFS on your machine to pull the fine-tuned model files during cloning:
+### 1. Clone the Repository & Pull LFS Assets
 ```bash
-# Initialize Git LFS on your machine
+# Initialize Git LFS
 git lfs install
 
-# Clone the repository
-git clone https://github.com/ani-1129/CarbonLedger.git
-cd CarbonLedger
+# Clone repository
+git clone https://github.com/kayastha12/Carbonledger.git
+cd Carbonledger
 
-# Verify large LFS assets are pulled
+# Pull fine-tuned models and datasets
 git lfs pull
 ```
 
-### 2. Install Dependencies
+### 2. Install Backend & Frontend Dependencies
 ```bash
 # Install Python backend dependencies
 pip install -r requirements.txt
@@ -83,134 +188,77 @@ npm install
 cd ..
 ```
 
-### 3. Automated One-Click Environment Setup
-Run the master setup script to decompress datasets, pre-download AI models from Hugging Face, and build the vector database:
+### 3. One-Click Automated Environment Setup
+Run the master setup script to extract datasets, pre-download pretrained Hugging Face weights, and build the ChromaDB vector index:
 ```bash
 python scripts/setup_project.py
 ```
-This single command automates the following phases:
-1. **Decompress Datasets**: Extracts compressed ZIP dataset archives from `datasets/compressed/` into `datasets/output/` (Procurement logs, Invoices, Logistics, Utilities, etc.).
-2. **Download AI Models**: Automatically pre-downloads and caches all required pretrained models (DistilBert, LayoutLMv3, Table Transformer, BGE Embeddings, and Qwen2.5-Instruct) into `models/pretrained/`.
-3. **Rebuild Vector DB**: Cleans the emission factor workbook and builds the semantic embeddings index inside ChromaDB.
 
 ### 4. Initialize SQLite Database
-Initialize the relational schema and seed it with multi-tenant default roles, users, and suppliers:
+Initialize database tables and seed with multi-tenant default roles, users, and supplier records:
 ```bash
 python api/database.py
 ```
 
-
 ---
 
-## Running the Application
+## 💻 Running the Application Locally
 
-### Running Backend API
-Start the FastAPI server from the workspace root directory:
+### Start Backend API Server (FastAPI)
 ```bash
-python -m api.main
+python run_server.py
 ```
-The interactive API documentation is available at [http://localhost:8000/docs](http://localhost:8000/docs).
+*API will be available at:* **`http://localhost:8000`**  
+*Interactive Swagger documentation:* **`http://localhost:8000/docs`**
 
-### Running Frontend Development Server
-Start the React application from the `frontend/` directory:
+### Start Frontend Development Server (React / Vite)
 ```bash
 cd frontend
 npm run dev
 ```
-Open [http://localhost:3000](http://localhost:3000) in your browser.
+*Frontend will be available at:* **`http://localhost:3000`** (or `http://localhost:5173`)
 
 ---
 
-## Training Models
+## 🧪 Testing & Verification
 
-Orchestrate the full training pipeline (Document Classifier, NER, Recommendation models, Anomaly detector) using the unified training runner:
+Execute the complete automated test suite covering document classification, factor matching, and mathematical calculation parity:
+
 ```bash
-python -m training.train_all
-```
-Alternatively, train specific components using their standalone scripts:
-- **Contrastive Matcher**: `python -m training.train_contrastive_matcher`
-- **Voter Forecaster**: `python -m training.train_forecaster`
+# Run all automated unit and integration tests
+pytest
 
----
+# Run end-to-end master reconciliation audit
+python verify_master_e2e_reconciliation.py
 
-## Folder Structure
-
-```
-CarbonLedger/
-├── api/                  # FastAPI Web Server and database connections
-├── backend/              # Production deployment placeholder
-├── configs/              # System and deployment configurations
-├── datasets/             # Data files, templates, and dataset generators
-├── docker/               # Container files (Dockerfiles & compose files)
-├── docs/                 # Documentation (SRS, reports, slides)
-├── evaluation/           # Performance auditing and benchmarking suites
-├── frontend/             # React application (Vite-based dev environment)
-├── models/               # Fine-tuned weights, pretrained caching, and model loaders
-├── output/               # Active output results and files
-├── preprocessing/        # Raw data cleaning and index preparation
-├── reports/              # Final static and generated audit reports
-├── scripts/              # Validation pipelines and maintenance scripts
-├── services/             # Core business engines (Calculations, RAG, Agents)
-├── tests/                # Automated pytest files
-├── vector_db/            # ChromaDB vector index folders
-├── assets/               # Static media files and screenshots
-├── LICENSE               # Project license file
-├── README.md             # Documentation readme
-├── requirements.txt      # Python dependencies
-└── package.json          # Node dependencies list (frontend)
+# Benchmark local pipeline performance
+python benchmark_local_e2e.py
 ```
 
 ---
 
-## Key API Endpoints
+## 📖 Key Documentation & Resources
 
-- `POST /api/v1/documents/upload` - Upload and classify sustainability invoices or manifest files.
-- `GET /api/v1/carbon/inventory` - Fetch current corporate GHG inventory.
-- `POST /api/cbam/process` - Parse and calculate CBAM tax liability.
-- `GET /api/cbam/pdf/{id}` - Export CBAM Declaration report as PDF.
-- `GET /api/cbam/excel/{id}` - Export CBAM Declaration report as Excel spreadsheet.
-- `GET /api/models/status` - Health check status of AI classifiers and extractors.
-
----
-
-## Deployment (Docker)
-
-To deploy the production-ready application stack using Docker Compose:
-```bash
-cd docker
-docker-compose up --build -d
-```
+- 📊 **[Technical Audit & Verification Report](docs/CARBONLEDGER_TECHNICAL_AUDIT_REPORT.md)**: Exhaustive verification metrics, model accuracy benchmarks, and data flow audits.
+- 📋 **[System Requirements Specification (SRS)](docs/CarbonLedger_SRS_v1.0.pdf)**: Formal software architecture, compliance requirements, and data models.
+- 🎙️ **[Live Demo & Presentation Script](docs/CARBONLEDGER_DEMO_SCRIPT.md)**: Step-by-step presentation script for live client and investor walkthroughs.
+- 📘 **[Complete System Walkthrough](docs/CARBONLEDGER_COMPLETE_WALKTHROUGH.md)**: Deep dive into the backend engines, math formulations, and endpoints.
+- 🤖 **[AI Copilot Documentation](CARBONLEDGER_AI_COPILOT_DOCUMENTATION.md)**: Architectural guide to RAG integration and vector retrieval.
+- 📑 **[Document Intake & Approval Workflow](DOCUMENT_INTAKE_APPROVAL_WORKFLOW_REPORT.md)**: Detailed audit report of human-in-the-loop validation stages.
 
 ---
 
-## Troubleshooting
+## 📄 License
 
-### Git LFS Bandwidth / Limit Errors
-If you run into Git LFS transfer limits or bandwidth errors during cloning, you can clone the repository without pulling LFS pointers immediately:
-```bash
-GIT_LFS_SKIP_SMUDGE=1 git clone https://github.com/ani-1129/CarbonLedger.git
-```
-Then pull them individually:
-```bash
-git lfs pull
-```
-
-### Missing Pretrained Cache Folders
-If you receive a `FileNotFoundError` or `ModuleNotFoundError` during server startup, ensure that the one-click setup orchestrator script has been executed successfully:
-```bash
-python scripts/setup_project.py
-```
-This script downloads Hugging Face models and extracts zipped datasets locally, ensuring all local cache assumptions match.
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
 
 ---
 
-## License
+## 👥 Authors & Acknowledgments
 
-This project is licensed under the MIT License - see the [LICENSE](file:///d:/internship/carbonledger/LICENSE) file for details.
+- **Lead Software Architect & AI Engineering**: Aniket Singh
+- **CarbonLedger Team**: Enterprise Sustainability & Regulatory Engineering
 
----
-
-## Contributors
-
-- **Lead Software Architect & DevOps**: Aniket Singh
-- **Sustainability Engineering**: CarbonLedger Team
+<div align="center">
+<sub>Built with precision for institutional decarbonization and global emissions transparency.</sub>
+</div>
